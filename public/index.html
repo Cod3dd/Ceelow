@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cee-lo Casino</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="casino-container">
+        <header>
+            <h1>Cee-lo Casino</h1>
+        </header>
+        <main>
+            <section id="room-setup">
+                <input id="username" type="text" placeholder="Enter Your Alias" required>
+                <input id="room-code" type="text" placeholder="Enter Room Code" required>
+                <button id="join-btn">Join Table</button>
+            </section>
+            <section id="game" style="display: none;">
+                <div class="player-info">
+                    <div class="player-header">
+                        <p class="your-info">You: <span id="player-name"></span> | Balance: <span id="coins"></span></p>
+                        <button id="leave-btn">Leave Table</button>
+                    </div>
+                    <div id="players" class="players-list"></div>
+                </div>
+                <div class="game-table">
+                    <div class="controls">
+                        <input id="bet-amount" type="number" min="1" placeholder="Your Bet (Min: 1)">
+                        <button id="bet-btn">Place Bet</button>
+                        <button id="roll-btn" disabled>Roll Dice</button>
+                        <button id="rematch-btn" style="display: none;">Rematch</button>
+                    </div>
+                    <div id="dice-container">
+                        <div class="die" id="die1">-</div>
+                        <div class="die" id="die2">-</div>
+                        <div class="die" id="die3">-</div>
+                    </div>
+                    <p id="result" class="result-text"></p>
+                    <p id="turn" class="turn-text"></p>
+                    <p id="timer" class="timer-text">Time Left: --</p>
+                    <div id="messages" class="message-box"></div>
+                </div>
+            </section>
+        </main>
+        <footer>
+            <p>Powered by xAI | Cee-lo Casino © 2025</p>
+        </footer>
+    </div>
+    <div id="instructions-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>How to Play Cee-lo</h2>
+            <p>1. Join a room and place a bet.</p>
+            <p>2. Roll 3 dice: 4-5-6 wins instantly, 1-2-3 loses instantly.</p>
+            <p>3. Otherwise, score with trips (e.g., 3-3-3) or a pair + point (e.g., 2-2-5).</p>
+            <p>4. Highest score takes the pot. Rematch to play again!</p>
+            <button id="instructions-ok">Got It!</button>
+        </div>
+    </div>
+    <div id="winner-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2 id="winner-text"></h2>
+            <button id="modal-ok">OK</button>
+        </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
