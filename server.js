@@ -5,7 +5,12 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = socketIo(server, {
+    cors: {
+        origin: "*", // Allow all origins for testing (restrict in production if needed)
+        methods: ["GET", "POST"]
+    }
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -250,4 +255,4 @@ function resetRound(roomCode) {
     io.to(roomCode).emit('roundReset');
 }
 
-server.listen(3000, () => console.log('Server running on http://localhost:3000'));
+server.listen(process.env.PORT || 3000, () => console.log('Server running on http://localhost:3000'));
