@@ -7,8 +7,9 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
     cors: {
-        origin: "*", // Allow all origins for testing (restrict in production if needed)
-        methods: ["GET", "POST"]
+        origin: "https://ceelow.onrender.com", // Match your Render URL
+        methods: ["GET", "POST"],
+        credentials: true
     }
 });
 
@@ -20,6 +21,7 @@ io.on('connection', (socket) => {
     console.log('A player connected:', socket.id);
 
     socket.on('joinRoom', ({ roomCode, username }) => {
+        console.log(`Player ${username} joining room: ${roomCode}, Socket: ${socket.id}`);
         socket.join(roomCode);
         if (!rooms[roomCode]) {
             rooms[roomCode] = {
@@ -255,4 +257,4 @@ function resetRound(roomCode) {
     io.to(roomCode).emit('roundReset');
 }
 
-server.listen(process.env.PORT || 3000, () => console.log('Server running on http://localhost:3000'));
+server.listen(process.env.PORT || 3000, () => console.log('Server running'));
