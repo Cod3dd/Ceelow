@@ -65,8 +65,8 @@ input:focus {
 }
 
 button {
-    padding: 10px 15px; /* Slightly smaller than before */
-    font-size: 1.2rem; /* Reduced for consistency */
+    padding: 10px 15px;
+    font-size: 1.2rem;
     background-color: #ff4500;
     color: #fff;
     border: none;
@@ -97,8 +97,8 @@ button:disabled {
 }
 
 #leave-btn {
-    background-color: #800020; /* Burgundy for professionalism */
-    margin-left: 15px; /* Space from player info */
+    background-color: #800020;
+    margin-left: 15px;
 }
 
 #leave-btn:hover {
@@ -123,13 +123,13 @@ section#game {
 .player-header {
     display: flex;
     align-items: center;
-    justify-content: space-between; /* Spread out name and button */
+    justify-content: space-between;
 }
 
 .your-info {
     font-size: 1.5rem;
     color: #ffd700;
-    margin: 0; /* Remove default margin */
+    margin: 0;
 }
 
 .players-list {
@@ -225,6 +225,18 @@ section#game {
     color: #fff;
 }
 
+.chat-input {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+#chat-input {
+    flex-grow: 1;
+    padding: 8px;
+    font-size: 1rem;
+}
+
 footer {
     text-align: center;
     padding-top: 20px;
@@ -275,4 +287,14 @@ footer p {
     background-color: #ff4500;
     padding: 12px 25px;
     font-size: 1.5rem;
+}
+
+@keyframes flash {
+    0% { background-color: #2e2e2e; }
+    50% { background-color: #ffd700; }
+    100% { background-color: #2e2e2e; }
+}
+
+.win-flash .modal-content {
+    animation: flash 1s ease-in-out 2;
 }
