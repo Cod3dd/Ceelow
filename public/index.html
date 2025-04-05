@@ -17,6 +17,7 @@
                 <input id="username" type="text" placeholder="Enter Your Alias" required>
                 <input id="room-code" type="text" placeholder="Enter Room Code" required>
                 <button id="join-btn">Join Table</button>
+                <div id="loading" style="display: none; text-align: center; color: #ffd700; margin-top: 10px;">Connecting...</div>
             </section>
             <section id="game" style="display: none;">
                 <div class="player-info">
@@ -42,6 +43,10 @@
                     <p id="turn" class="turn-text"></p>
                     <p id="timer" class="timer-text">Time Left: --</p>
                     <div id="messages" class="message-box"></div>
+                    <div class="chat-input">
+                        <input id="chat-input" type="text" placeholder="Type a message..." maxlength="100">
+                        <button id="send-chat">Send</button>
+                    </div>
                 </div>
             </section>
         </main>
