@@ -7,7 +7,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
     cors: {
-        origin: "https://ceelow.onrender.com", // Match your Render URL
+        origin: "https://ceelow.onrender.com",
         methods: ["GET", "POST"],
         credentials: true
     }
@@ -18,12 +18,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 let rooms = {};
 
 io.on('connection', (socket) => {
-    console.log('A player connected:', socket.id);
+    console.log(`[Connection] Player connected: ${socket.id}`);
 
     socket.on('joinRoom', ({ roomCode, username }) => {
-        console.log(`Player ${username} joining room: ${roomCode}, Socket: ${socket.id}`);
+        console.log(`[JoinRoom] Player ${username} joining room: ${roomCode}, Socket: ${socket.id}`);
         socket.join(roomCode);
         if (!rooms[roomCode]) {
+            console.log(`[JoinRoom] Creating new room: ${roomCode}`);
             rooms[roomCode] = {
                 players: [],
                 currentTurn: 0,
@@ -37,11 +38,13 @@ io.on('connection', (socket) => {
         let playerName = username && username.trim() ? username.trim() : `Player${rooms[roomCode].players.length + 1}`;
         let player = { id: socket.id, coins: 100, name: playerName };
         rooms[roomCode].players.push(player);
+        console.log(`[JoinRoom] Room ${roomCode} players: ${JSON.stringify(rooms[roomCode].players.map(p => p.name))}`);
         io.to(roomCode).emit('updatePlayers', rooms[roomCode].players);
         socket.emit('joined', { roomCode, player });
     });
 
     socket.on('placeBet', ({ roomCode, bet }) => {
+        console.log(`[PlaceBet] Room ${roomCode}, Player ${socket.id} bets ${bet}`);
         let room = rooms[roomCode];
         let player = room.players.find(p => p.id === socket.id);
         if (player.coins >= bet && !room.bets[socket.id]) {
@@ -61,6 +64,7 @@ io.on('connection', (socket) => {
     socket.on('rollDice', (roomCode) => {
         let room = rooms[roomCode];
         let player = room.players[room.currentTurn];
+        console.log(`[RollDice] Room ${roomCode}, Player ${player.name} rolling`);
         if (player.id === socket.id && room.roundActive) {
             clearTimeout(room.turnTimer);
             let dice, result, point;
@@ -112,6 +116,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
+        console.log(`[Disconnect] Player disconnected: ${socket.id}`);
         for (let roomCode in rooms) {
             let room = rooms[roomCode];
             let player = room.players.find(p => p.id === socket.id);
@@ -123,6 +128,7 @@ io.on('connection', (socket) => {
             delete room.rolls[socket.id];
             room.rematchVotes.delete(socket.id);
             if (room.players.length === 0) {
+                console.log(`[Disconnect] Room ${roomCode} emptied, deleting`);
                 delete rooms[roomCode];
             } else {
                 io.to(roomCode).emit('updatePlayers', room.players);
@@ -257,4 +263,4 @@ function resetRound(roomCode) {
     io.to(roomCode).emit('roundReset');
 }
 
-server.listen(process.env.PORT || 3000, () => console.log('Server running'));
+server.listen(process.env.PORT || 3000, () => console.log(`Server running on port ${process.env.PORT || 3000}`));
