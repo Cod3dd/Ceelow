@@ -1,4 +1,4 @@
-const socket = io(window.location.origin);
+let socket = io(window.location.origin); // Changed to let for reassignment
 let roomCode = null;
 let myPlayer = null;
 let timerInterval = null;
@@ -50,6 +50,14 @@ socket.on('updatePlayers', (players) => {
             document.getElementById('coins').textContent = me.coins;
         }
     }
+});
+
+socket.on('roomStatus', ({ canPlay }) => {
+    const betBtn = document.getElementById('bet-btn');
+    const rollBtn = document.getElementById('roll-btn');
+    betBtn.disabled = !canPlay;
+    rollBtn.disabled = !canPlay || (document.getElementById('turn').textContent.split(': ')[1] !== myPlayer.name);
+    document.getElementById('result').textContent = canPlay ? 'Place your bets!' : 'Waiting for another player to join...';
 });
 
 document.getElementById('bet-btn').addEventListener('click', () => {
@@ -110,10 +118,9 @@ document.getElementById('rematch-btn').addEventListener('click', () => {
 
 document.getElementById('leave-btn').addEventListener('click', () => {
     socket.disconnect();
-    document.getElementById('game').style.display = 'none';
-    document.getElementById('room-setup').style.display = 'block';
-    document.getElementById('username').value = '';
-    document.getElementById('room-code').value = '';
+    resetGameState();
+    socket = io(window.location.origin); // Reinitialize socket
+    setupSocketListeners(); // Reattach listeners
 });
 
 document.getElementById('modal-ok').addEventListener('click', () => {
@@ -197,3 +204,148 @@ function startRematchTimer() {
     }, 1000);
     document.getElementById('rematch-btn').addEventListener('click', () => clearInterval(rematchInterval), { once: true });
 }
+
+function resetGameState() {
+    document.getElementById('game').style.display = 'none';
+    document.getElementById('room-setup').style.display = 'block';
+    document.getElementById('username').value = '';
+    document.getElementById('room-code').value = '';
+    document.getElementById('player-name').textContent = '';
+    document.getElementById('coins').textContent = '';
+    document.getElementById('players').innerHTML = '';
+    document.getElementById('bet-amount').value = '';
+    document.getElementById('bet-btn').disabled = true;
+    document.getElementById('roll-btn').disabled = true;
+    document.getElementById('rematch-btn').style.display = 'none';
+    document.getElementById('rematch-btn').disabled = false;
+    const dice = [document.getElementById('die1'), document.getElementById('die2'), document.getElementById('die3')];
+    dice.forEach(die => {
+        die.classList.remove('spinning');
+        die.textContent = '-';
+    });
+    document.getElementById('result').textContent = '';
+    document.getElementById('turn').textContent = '';
+    document.getElementById('timer').textContent = 'Time Left: --';
+    document.getElementById('messages').innerHTML = '';
+    if (timerInterval) clearInterval(timerInterval);
+    roomCode = null;
+    myPlayer = null;
+}
+
+function setupSocketListeners() {
+    socket.on('joined', ({ roomCode: rc, player }) => {
+        roomCode = rc;
+        myPlayer = player;
+        document.getElementById('room-setup').style.display = 'none';
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('game').style.display = 'block';
+        document.getElementById('player-name').textContent = player.name;
+        document.getElementById('coins').textContent = player.coins;
+    });
+
+    socket.on('joinError', (msg) => {
+        document.getElementById('loading').style.display = 'none';
+        alert(msg);
+    });
+
+    socket.on('updatePlayers', (players) => {
+        const playersDiv = document.getElementById('players');
+        playersDiv.innerHTML = players.map(p => `<p class="${p.name === document.getElementById('turn').textContent.split(': ')[1] ? 'active' : ''}">${p.name} - Balance: ${p.coins}</p>`).join('');
+        if (myPlayer) {
+            const me = players.find(p => p.id === myPlayer.id);
+            if (me) {
+                document.getElementById('coins').textContent = me.coins;
+            }
+        }
+    });
+
+    socket.on('roomStatus', ({ canPlay }) => {
+        const betBtn = document.getElementById('bet-btn');
+        const rollBtn = document.getElementById('roll-btn');
+        betBtn.disabled = !canPlay;
+        rollBtn.disabled = !canPlay || (document.getElementById('turn').textContent.split(': ')[1] !== myPlayer.name);
+        document.getElementById('result').textContent = canPlay ? 'Place your bets!' : 'Waiting for another player to join...';
+    });
+
+    socket.on('diceRolled', ({ player, dice, result }) => {
+        const diceElements = [
+            document.getElementById('die1'),
+            document.getElementById('die2'),
+            document.getElementById('die3')
+        ];
+        setTimeout(() => {
+            diceElements.forEach((die, index) => {
+                die.classList.remove('spinning');
+                die.textContent = dice[index];
+            });
+            document.getElementById('result').textContent = `${player}: ${result}`;
+            if (result.includes("Rerolling")) {
+                setTimeout(() => {
+                    diceElements.forEach(die => {
+                        die.textContent = '?';
+                        die.classList.add('spinning');
+                    });
+                    rollSound.play();
+                }, 500);
+            }
+        }, 1500);
+    });
+
+    socket.on('nextTurn', ({ playerName, timeLeft }) => {
+        document.getElementById('turn').textContent = `Turn: ${playerName}`;
+        const rollBtn = document.getElementById('roll-btn');
+        rollBtn.disabled = playerName !== myPlayer.name;
+        if (timerInterval) clearInterval(timerInterval);
+        let time = timeLeft;
+        document.getElementById('timer').textContent = `Time Left: ${time}s`;
+        timerInterval = setInterval(() => {
+            time--;
+            document.getElementById('timer').textContent = `Time Left: ${time}s`;
+            if (time <= 0) clearInterval(timerInterval);
+        }, 1000);
+        socket.emit('requestPlayersUpdate', roomCode);
+    });
+
+    socket.on('message', (msg) => {
+        const messages = document.getElementById('messages');
+        messages.innerHTML += `<p>${msg}</p>`;
+        messages.scrollTop = messages.scrollHeight;
+    });
+
+    socket.on('gameOver', ({ message, winnerName, amount }) => {
+        document.getElementById('result').textContent = message;
+        document.getElementById('turn').textContent = '';
+        document.getElementById('timer').textContent = 'Time Left: --';
+        if (timerInterval) clearInterval(timerInterval);
+        document.getElementById('roll-btn').disabled = true;
+
+        if (winnerName) {
+            setTimeout(() => {
+                document.getElementById('winner-text').textContent = `${winnerName} won ${amount} coins!`;
+                document.getElementById('winner-modal').style.display = 'flex';
+                document.getElementById('winner-modal').classList.add('win-flash');
+                winSound.play();
+                startRematchTimer();
+            }, 3000);
+        }
+    });
+
+    socket.on('roundReset', () => {
+        document.getElementById('bet-amount').value = '';
+        document.getElementById('bet-btn').disabled = false;
+        document.getElementById('roll-btn').disabled = true;
+        document.getElementById('rematch-btn').style.display = 'none';
+        document.getElementById('rematch-btn').disabled = false;
+        const dice = [document.getElementById('die1'), document.getElementById('die2'), document.getElementById('die3')];
+        dice.forEach(die => {
+            die.classList.remove('spinning');
+            die.textContent = '-';
+        });
+        document.getElementById('result').textContent = 'Place your bets for the next round!';
+        document.getElementById('timer').textContent = 'Time Left: --';
+        if (timerInterval) clearInterval(timerInterval);
+    });
+}
+
+// Initial setup of socket listeners
+setupSocketListeners();
