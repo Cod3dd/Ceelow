@@ -36,6 +36,10 @@ io.on('connection', (socket) => {
             };
         }
         let playerName = username && username.trim() ? username.trim() : `Player${rooms[roomCode].players.length + 1}`;
+        if (rooms[roomCode].players.some(p => p.name === playerName)) {
+            socket.emit('joinError', 'Username already taken in this room!');
+            return;
+        }
         let player = { id: socket.id, coins: 100, name: playerName };
         rooms[roomCode].players.push(player);
         console.log(`[JoinRoom] Room ${roomCode} players: ${JSON.stringify(rooms[roomCode].players.map(p => p.name))}`);
@@ -107,6 +111,11 @@ io.on('connection', (socket) => {
             resetRound(roomCode);
             io.to(roomCode).emit('message', 'All players voted for a rematch! Starting new round...');
         }
+    });
+
+    socket.on('chatMessage', ({ roomCode, message }) => {
+        console.log(`[Chat] Room ${roomCode}: ${message}`);
+        io.to(roomCode).emit('message', message);
     });
 
     socket.on('requestPlayersUpdate', (roomCode) => {
