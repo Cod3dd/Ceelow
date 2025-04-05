@@ -1,4 +1,4 @@
-const socket = io(window.location.origin);
+const socket = io(window.location.origin); // Changed from io() to io(window.location.origin)
 let roomCode = null;
 let myPlayer = null;
 let timerInterval = null;
