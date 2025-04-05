@@ -2,7 +2,7 @@ let socket = io(window.location.origin);
 let roomCode = null;
 let myPlayer = null;
 let timerInterval = null;
-let canPlay = false; // Track playability state
+let canPlay = false;
 
 const rollSound = new Audio('https://freesound.org/data/previews/262/262779_4293761-lq.mp3');
 const winSound = new Audio('https://freesound.org/data/previews/387/387234_4280995-lq.mp3');
@@ -35,8 +35,6 @@ socket.on('joined', ({ roomCode: rc, player }) => {
     document.getElementById('game').style.display = 'block';
     document.getElementById('player-name').textContent = player.name;
     document.getElementById('coins').textContent = player.coins;
-    document.getElementById('bet-btn').disabled = !canPlay;
-    document.getElementById('roll-btn').disabled = true; // Initially disabled until turn and canPlay
 });
 
 socket.on('joinError', (msg) => {
@@ -60,7 +58,7 @@ socket.on('roomStatus', ({ canPlay: newCanPlay }) => {
     const betBtn = document.getElementById('bet-btn');
     const rollBtn = document.getElementById('roll-btn');
     betBtn.disabled = !canPlay;
-    rollBtn.disabled = !canPlay || (document.getElementById('turn').textContent.split(': ')[1] !== myPlayer.name);
+    rollBtn.disabled = !canPlay || (document.getElementById('turn').textContent && document.getElementById('turn').textContent.split(': ')[1] !== myPlayer.name);
     document.getElementById('result').textContent = canPlay ? 'Place your bets!' : 'Waiting for another player to join...';
 });
 
@@ -129,10 +127,10 @@ document.getElementById('rematch-btn').addEventListener('click', () => {
 });
 
 document.getElementById('leave-btn').addEventListener('click', () => {
-    socket.close(); // Fully close the socket
+    socket.close();
     resetGameState();
-    socket = io(window.location.origin); // Reinitialize socket
-    setupSocketListeners(); // Reattach listeners
+    socket = io(window.location.origin);
+    setupSocketListeners();
 });
 
 document.getElementById('modal-ok').addEventListener('click', () => {
@@ -195,13 +193,15 @@ socket.on('roundReset', () => {
     if (timerInterval) clearInterval(timerInterval);
 });
 
-document.getElementById('send-chat').addEventListener('click', () => {
+document.getElementById('send-chat').addEventListener('click', sendChatMessage);
+
+function sendChatMessage() {
     const message = document.getElementById('chat-input').value.trim();
     if (message && roomCode) {
         socket.emit('chatMessage', { roomCode, message: `${myPlayer.name}: ${message}` });
         document.getElementById('chat-input').value = '';
     }
-});
+}
 
 function startRematchTimer() {
     let time = 10;
@@ -244,6 +244,8 @@ function resetGameState() {
     roomCode = null;
     myPlayer = null;
     canPlay = false;
+    // Remove old chat listener to prevent duplication
+    document.getElementById('send-chat').removeEventListener('click', sendChatMessage);
 }
 
 function setupSocketListeners() {
@@ -255,8 +257,6 @@ function setupSocketListeners() {
         document.getElementById('game').style.display = 'block';
         document.getElementById('player-name').textContent = player.name;
         document.getElementById('coins').textContent = player.coins;
-        document.getElementById('bet-btn').disabled = !canPlay;
-        document.getElementById('roll-btn').disabled = true;
     });
 
     socket.on('joinError', (msg) => {
@@ -280,7 +280,7 @@ function setupSocketListeners() {
         const betBtn = document.getElementById('bet-btn');
         const rollBtn = document.getElementById('roll-btn');
         betBtn.disabled = !canPlay;
-        rollBtn.disabled = !canPlay || (document.getElementById('turn').textContent.split(': ')[1] !== myPlayer.name);
+        rollBtn.disabled = !canPlay || (document.getElementById('turn').textContent && document.getElementById('turn').textContent.split(': ')[1] !== myPlayer.name);
         document.getElementById('result').textContent = canPlay ? 'Place your bets!' : 'Waiting for another player to join...';
     });
 
