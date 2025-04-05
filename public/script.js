@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io(window.location.origin);
 let roomCode = null;
 let myPlayer = null;
 let timerInterval = null;
@@ -148,7 +148,7 @@ socket.on('gameOver', ({ message, winnerName, amount }) => {
             document.getElementById('winner-modal').style.display = 'flex';
             winSound.play();
             startRematchTimer();
-        }, 3000); // 3-second delay before announcing winner
+        }, 3000);
     }
 });
 
