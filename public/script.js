@@ -1,4 +1,4 @@
-const socket = io(window.location.origin); // Changed from io() to io(window.location.origin)
+const socket = io(window.location.origin);
 let roomCode = null;
 let myPlayer = null;
 let timerInterval = null;
@@ -19,6 +19,7 @@ document.getElementById('join-btn').addEventListener('click', () => {
     roomCode = document.getElementById('room-code').value;
     const username = document.getElementById('username').value;
     if (roomCode && username) {
+        document.getElementById('loading').style.display = 'block';
         socket.emit('joinRoom', { roomCode, username });
     } else {
         alert('Please enter both an alias and a room code!');
@@ -29,9 +30,15 @@ socket.on('joined', ({ roomCode: rc, player }) => {
     roomCode = rc;
     myPlayer = player;
     document.getElementById('room-setup').style.display = 'none';
+    document.getElementById('loading').style.display = 'none';
     document.getElementById('game').style.display = 'block';
     document.getElementById('player-name').textContent = player.name;
     document.getElementById('coins').textContent = player.coins;
+});
+
+socket.on('joinError', (msg) => {
+    document.getElementById('loading').style.display = 'none';
+    alert(msg);
 });
 
 socket.on('updatePlayers', (players) => {
@@ -146,6 +153,7 @@ socket.on('gameOver', ({ message, winnerName, amount }) => {
         setTimeout(() => {
             document.getElementById('winner-text').textContent = `${winnerName} won ${amount} coins!`;
             document.getElementById('winner-modal').style.display = 'flex';
+            document.getElementById('winner-modal').classList.add('win-flash');
             winSound.play();
             startRematchTimer();
         }, 3000);
@@ -166,6 +174,14 @@ socket.on('roundReset', () => {
     document.getElementById('result').textContent = 'Place your bets for the next round!';
     document.getElementById('timer').textContent = 'Time Left: --';
     if (timerInterval) clearInterval(timerInterval);
+});
+
+document.getElementById('send-chat').addEventListener('click', () => {
+    const message = document.getElementById('chat-input').value.trim();
+    if (message && roomCode) {
+        socket.emit('chatMessage', { roomCode, message: `${myPlayer.name}: ${message}` });
+        document.getElementById('chat-input').value = '';
+    }
 });
 
 function startRematchTimer() {
