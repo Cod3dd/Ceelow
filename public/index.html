@@ -3,73 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cee-lo Casino</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+    <title>Ceelo</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="casino-container">
-        <header>
-            <h1>Cee-lo Casino</h1>
-        </header>
-        <main>
-            <section id="room-setup">
-                <input id="username" type="text" placeholder="Enter Your Alias" required>
-                <input id="room-code" type="text" placeholder="Enter Room Code" required>
-                <button id="join-btn">Join Table</button>
-                <div id="loading" style="display: none; text-align: center; color: #ffd700; margin-top: 10px;">Connecting...</div>
-            </section>
-            <section id="game" style="display: none;">
-                <div class="player-info">
-                    <div class="player-header">
-                        <p class="your-info">You: <span id="player-name"></span> | Balance: <span id="coins"></span></p>
-                        <button id="leave-btn">Leave Table</button>
-                    </div>
-                    <div id="players" class="players-list"></div>
-                </div>
-                <div class="game-table">
-                    <div class="controls">
-                        <input id="bet-amount" type="number" min="1" placeholder="Your Bet (Min: 1)">
-                        <button id="bet-btn">Place Bet</button>
-                        <button id="roll-btn" disabled>Roll Dice</button>
-                        <button id="rematch-btn" style="display: none;">Rematch</button>
-                    </div>
-                    <div id="dice-container">
-                        <div class="die" id="die1">-</div>
-                        <div class="die" id="die2">-</div>
-                        <div class="die" id="die3">-</div>
-                    </div>
-                    <p id="result" class="result-text"></p>
-                    <p id="turn" class="turn-text"></p>
-                    <p id="timer" class="timer-text">Time Left: --</p>
-                    <div id="messages" class="message-box"></div>
-                    <div class="chat-input">
-                        <input id="chat-input" type="text" placeholder="Type a message..." maxlength="100">
-                        <button id="send-chat">Send</button>
-                    </div>
-                </div>
-            </section>
-        </main>
-        <footer>
-            <p>Powered by xAI | Cee-lo Casino © 2025</p>
-        </footer>
-    </div>
-    <div id="instructions-modal" class="modal" style="display: none;">
+    <div id="instructions-modal" class="modal">
         <div class="modal-content">
-            <h2>How to Play Cee-lo</h2>
-            <p>1. Join a room and place a bet.</p>
-            <p>2. Roll 3 dice: 4-5-6 wins instantly, 1-2-3 loses instantly.</p>
-            <p>3. Otherwise, score with trips (e.g., 3-3-3) or a pair + point (e.g., 2-2-5).</p>
-            <p>4. Highest score takes the pot. Rematch to play again!</p>
-            <button id="instructions-ok">Got It!</button>
+            <h2>Welcome to Ceelo!</h2>
+            <p>Rules: Roll 3 dice. 4-5-6 is an instant win, 1-2-3 is an instant loss. Pairs set a point with the third die. Highest point wins the pot!</p>
+            <button id="instructions-ok">Got it!</button>
         </div>
     </div>
+
+    <div id="room-setup">
+        <h1>Join a Game</h1>
+        <input type="text" id="username" placeholder="Your Alias">
+        <input type="text" id="room-code" placeholder="Room Code">
+        <button id="join-btn">Join Table</button>
+    </div>
+
+    <div id="loading" style="display: none;">Loading...</div>
+
+    <div id="game" style="display: none;">
+        <h1>Ceelo</h1>
+        <p>Player: <span id="player-name"></span> | Coins: <span id="coins"></span></p>
+        <select id="game-mode">
+            <option value="single">Single Round</option>
+            <option value="bestOf3">Best of 3</option>
+        </select>
+        <div id="players"></div>
+        <input type="number" id="bet-amount" placeholder="Bet Amount">
+        <button id="bet-btn">Place Bet</button>
+        <button id="roll-btn" disabled>Roll Dice</button>
+        <button id="rematch-btn" style="display: none;">Rematch</button>
+        <button id="leave-btn">Leave Table</button>
+        <div id="dice">
+            <span id="die1">-</span>
+            <span id="die2">-</span>
+            <span id="die3">-</span>
+        </div>
+        <p id="result"></p>
+        <p id="turn"></p>
+        <p id="timer">Time Left: --</p>
+        <div id="chat">
+            <div id="messages"></div>
+            <input type="text" id="chat-input" placeholder="Chat...">
+            <button id="send-chat">Send</button>
+        </div>
+    </div>
+
     <div id="winner-modal" class="modal" style="display: none;">
         <div class="modal-content">
-            <h2 id="winner-text"></h2>
+            <p id="winner-text"></p>
             <button id="modal-ok">OK</button>
         </div>
     </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 </body>
