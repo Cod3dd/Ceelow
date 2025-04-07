@@ -15,134 +15,137 @@ const io = socketIo(server, {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-let rooms = {};
+const rooms = new Map(); // Use Map for better performance
+
+function initializeRoom(roomCode) {
+    return {
+        players: [],
+        currentTurn: 0,
+        bets: new Map(),
+        rolls: new Map(),
+        roundActive: false,
+        rematchVotes: new Set(),
+        turnTimer: null,
+        roundCount: 0,
+        maxRounds: 1, // Default to single round, configurable later
+        wins: new Map() // Track wins for best-of-3
+    };
+}
 
 io.on('connection', (socket) => {
     console.log(`[Connection] Player connected: ${socket.id}`);
 
     socket.on('joinRoom', ({ roomCode, username }) => {
-        console.log(`[JoinRoom] Player ${username} joining room: ${roomCode}, Socket: ${socket.id}`);
+        console.log(`[JoinRoom] ${username} joining ${roomCode}, Socket: ${socket.id}`);
         socket.join(roomCode);
-        if (!rooms[roomCode]) {
-            console.log(`[JoinRoom] Creating new room: ${roomCode}`);
-            rooms[roomCode] = {
-                players: [],
-                currentTurn: 0,
-                bets: {},
-                rolls: {},
-                roundActive: false,
-                rematchVotes: new Set(),
-                turnTimer: null
-            };
+
+        if (!rooms.has(roomCode)) {
+            rooms.set(roomCode, initializeRoom(roomCode));
+            console.log(`[JoinRoom] Created room: ${roomCode}`);
         }
-        let playerName = username && username.trim() ? username.trim() : `Player${rooms[roomCode].players.length + 1}`;
-        if (rooms[roomCode].players.some(p => p.name === playerName)) {
-            socket.emit('joinError', 'Username already taken in this room!');
+
+        const room = rooms.get(roomCode);
+        const playerName = username.trim() || `Player${room.players.length + 1}`;
+        if (room.players.some(p => p.name === playerName)) {
+            socket.emit('joinError', 'Username taken!');
             return;
         }
-        let player = { id: socket.id, coins: 100, name: playerName };
-        rooms[roomCode].players.push(player);
-        console.log(`[JoinRoom] Room ${roomCode} players: ${JSON.stringify(rooms[roomCode].players.map(p => p.name))}`);
-        io.to(roomCode).emit('updatePlayers', rooms[roomCode].players);
+
+        const player = { id: socket.id, coins: 100, name: playerName, roundsWon: 0 };
+        room.players.push(player);
         socket.emit('joined', { roomCode, player });
+        broadcastRoomUpdate(roomCode);
+    });
+
+    socket.on('setGameMode', ({ roomCode, bestOf }) => {
+        const room = rooms.get(roomCode);
+        if (!room || room.roundActive) return;
+        room.maxRounds = bestOf === 'bestOf3' ? 3 : 1;
+        io.to(roomCode).emit('message', `Game mode set to ${room.maxRounds === 3 ? 'Best of 3' : 'Single Round'}`);
+        broadcastRoomUpdate(roomCode);
     });
 
     socket.on('placeBet', ({ roomCode, bet }) => {
-        console.log(`[PlaceBet] Room ${roomCode}, Player ${socket.id} bets ${bet}`);
-        let room = rooms[roomCode];
-        let player = room.players.find(p => p.id === socket.id);
-        if (player.coins >= bet && !room.bets[socket.id]) {
-            room.bets[socket.id] = bet;
+        const room = rooms.get(roomCode);
+        if (room.players.length < 2 || room.roundActive) return;
+        const player = room.players.find(p => p.id === socket.id);
+        if (player && player.coins >= bet && !room.bets.has(socket.id)) {
+            room.bets.set(socket.id, bet);
             player.coins -= bet;
-            io.to(roomCode).emit('updatePlayers', room.players);
-            io.to(roomCode).emit('message', `${player.name} bet ${bet} coins.`);
-
-            if (Object.keys(room.bets).length === room.players.length && !room.roundActive) {
-                room.roundActive = true;
-                startTurnTimer(roomCode, 'roll');
-                io.to(roomCode).emit('nextTurn', { playerName: room.players[room.currentTurn].name, timeLeft: 30 });
+            io.to(roomCode).emit('message', `${player.name} bet ${bet} coins`);
+            broadcastRoomUpdate(roomCode);
+            if (room.bets.size === room.players.length) {
+                startRound(roomCode);
             }
         }
     });
 
     socket.on('rollDice', (roomCode) => {
-        let room = rooms[roomCode];
-        let player = room.players[room.currentTurn];
-        console.log(`[RollDice] Room ${roomCode}, Player ${player.name} rolling`);
-        if (player.id === socket.id && room.roundActive) {
-            clearTimeout(room.turnTimer);
-            let dice, result, point;
-            do {
-                dice = rollDice();
-                result = getCeeloResult(dice);
-                point = calculatePoint(dice, result);
-                if (!isValidResult(result)) {
-                    io.to(roomCode).emit('diceRolled', { player: player.name, dice, result: `${result} Rerolling...` });
-                }
-            } while (!isValidResult(result));
+        const room = rooms.get(roomCode);
+        if (room.players.length < 2 || !room.roundActive) return;
+        const player = room.players[room.currentTurn];
+        if (player.id !== socket.id) return;
 
-            room.rolls[socket.id] = { dice, result, point };
-            io.to(roomCode).emit('diceRolled', { player: player.name, dice, result });
-
-            if (result.includes("Win")) {
-                handleInstantWin(roomCode, player);
-                return;
-            } else if (result.includes("Loss")) {
-                handleInstantLoss(roomCode);
-                return;
+        clearTimeout(room.turnTimer);
+        let dice, result, point;
+        do {
+            dice = rollDice();
+            result = getCeeloResult(dice);
+            point = calculatePoint(dice, result);
+            if (!isValidResult(result)) {
+                io.to(roomCode).emit('diceRolled', { player: player.name, dice, result: `${result} Rerolling...` });
             }
+        } while (!isValidResult(result));
 
-            room.currentTurn = (room.currentTurn + 1) % room.players.length;
-            if (Object.keys(room.rolls).length === room.players.length) {
-                determineWinner(roomCode);
-            } else {
-                startTurnTimer(roomCode, 'roll');
-                io.to(roomCode).emit('nextTurn', { playerName: room.players[room.currentTurn].name, timeLeft: 30 });
-            }
+        room.rolls.set(socket.id, { dice, result, point });
+        io.to(roomCode).emit('diceRolled', { player: player.name, dice, result });
+
+        if (result.includes("Win")) {
+            handleInstantWin(roomCode, player);
+        } else if (result.includes("Loss")) {
+            handleInstantLoss(roomCode);
+        } else {
+            nextTurn(roomCode);
         }
     });
 
     socket.on('voteRematch', (roomCode) => {
-        let room = rooms[roomCode];
+        const room = rooms.get(roomCode);
         room.rematchVotes.add(socket.id);
         io.to(roomCode).emit('message', `${room.players.find(p => p.id === socket.id).name} wants a rematch! (${room.rematchVotes.size}/${room.players.length})`);
-        
         if (room.rematchVotes.size === room.players.length) {
             resetRound(roomCode);
-            io.to(roomCode).emit('message', 'All players voted for a rematch! Starting new round...');
+            io.to(roomCode).emit('message', 'New round starting...');
         }
     });
 
     socket.on('chatMessage', ({ roomCode, message }) => {
-        console.log(`[Chat] Room ${roomCode}: ${message}`);
         io.to(roomCode).emit('message', message);
     });
 
     socket.on('requestPlayersUpdate', (roomCode) => {
-        if (rooms[roomCode]) {
-            io.to(roomCode).emit('updatePlayers', rooms[roomCode].players);
-        }
+        broadcastRoomUpdate(roomCode);
     });
 
     socket.on('disconnect', () => {
         console.log(`[Disconnect] Player disconnected: ${socket.id}`);
-        for (let roomCode in rooms) {
-            let room = rooms[roomCode];
-            let player = room.players.find(p => p.id === socket.id);
+        for (const [roomCode, room] of rooms) {
+            const player = room.players.find(p => p.id === socket.id);
             if (player) {
-                io.to(roomCode).emit('message', `${player.name} has left the table.`);
-            }
-            room.players = room.players.filter(p => p.id !== socket.id);
-            delete room.bets[socket.id];
-            delete room.rolls[socket.id];
-            room.rematchVotes.delete(socket.id);
-            if (room.players.length === 0) {
-                console.log(`[Disconnect] Room ${roomCode} emptied, deleting`);
-                delete rooms[roomCode];
-            } else {
-                io.to(roomCode).emit('updatePlayers', room.players);
-                if (room.roundActive && room.players.length === Object.keys(room.rolls).length) {
-                    determineWinner(roomCode);
+                io.to(roomCode).emit('message', `${player.name} left the table`);
+                room.players = room.players.filter(p => p.id !== socket.id);
+                room.bets.delete(socket.id);
+                room.rolls.delete(socket.id);
+                room.rematchVotes.delete(socket.id);
+                room.wins.delete(socket.id);
+                if (room.players.length === 0) {
+                    rooms.delete(roomCode);
+                    console.log(`[Disconnect] Room ${roomCode} deleted`);
+                } else {
+                    broadcastRoomUpdate(roomCode);
+                    if (room.roundActive && room.rolls.size === room.players.length) {
+                        determineWinner(roomCode);
+                    }
                 }
             }
         }
@@ -150,16 +153,12 @@ io.on('connection', (socket) => {
 });
 
 function rollDice() {
-    return [
-        Math.floor(Math.random() * 6) + 1,
-        Math.floor(Math.random() * 6) + 1,
-        Math.floor(Math.random() * 6) + 1
-    ];
+    return Array.from({ length: 3 }, () => Math.floor(Math.random() * 6) + 1);
 }
 
 function getCeeloResult(dice) {
-    dice.sort((a, b) => a - b);
-    let [d1, d2, d3] = dice;
+    const sorted = [...dice].sort();
+    const [d1, d2, d3] = sorted;
     if (d1 === 4 && d2 === 5 && d3 === 6) return "4-5-6! Instant Win!";
     if (d1 === 1 && d2 === 2 && d3 === 3) return "1-2-3! Instant Loss!";
     if (d1 === d2 && d2 === d3) return `Trips ${d1}! Point: ${d1}`;
@@ -181,95 +180,121 @@ function isValidResult(result) {
     return result.includes("Win") || result.includes("Loss") || result.includes("Trips") || result.includes("Pair");
 }
 
-function startTurnTimer(roomCode, phase) {
-    let room = rooms[roomCode];
-    if (room.turnTimer) clearTimeout(room.turnTimer);
+function startRound(roomCode) {
+    const room = rooms.get(roomCode);
+    room.roundActive = true;
+    room.currentTurn = 0;
+    startTurnTimer(roomCode);
+    io.to(roomCode).emit('nextTurn', { playerName: room.players[0].name, timeLeft: 30 });
+}
+
+function nextTurn(roomCode) {
+    const room = rooms.get(roomCode);
+    room.currentTurn = (room.currentTurn + 1) % room.players.length;
+    if (room.rolls.size === room.players.length) {
+        determineWinner(roomCode);
+    } else {
+        startTurnTimer(roomCode);
+        io.to(roomCode).emit('nextTurn', { playerName: room.players[room.currentTurn].name, timeLeft: 30 });
+    }
+}
+
+function startTurnTimer(roomCode) {
+    const room = rooms.get(roomCode);
+    clearTimeout(room.turnTimer);
     room.turnTimer = setTimeout(() => {
-        io.to(roomCode).emit('message', `${room.players[room.currentTurn].name} took too long! Skipping turn...`);
-        if (phase === 'roll') {
-            room.rolls[room.players[room.currentTurn].id] = { dice: [0, 0, 0], result: "Skipped", point: 0 };
-            room.currentTurn = (room.currentTurn + 1) % room.players.length;
-            if (Object.keys(room.rolls).length === room.players.length) {
-                determineWinner(roomCode);
-            } else {
-                startTurnTimer(roomCode, 'roll');
-                io.to(roomCode).emit('nextTurn', { playerName: room.players[room.currentTurn].name, timeLeft: 30 });
-            }
-        }
+        const player = room.players[room.currentTurn];
+        io.to(roomCode).emit('message', `${player.name} took too long! Skipping...`);
+        room.rolls.set(player.id, { dice: [0, 0, 0], result: "Skipped", point: 0 });
+        nextTurn(roomCode);
     }, 30000);
 }
 
 function handleInstantWin(roomCode, winner) {
-    let room = rooms[roomCode];
-    let pot = Object.values(room.bets).reduce((sum, bet) => sum + bet, 0);
-    winner.coins += pot;
-    io.to(roomCode).emit('gameOver', {
-        message: `${winner.name} rolled 4-5-6 and wins ${pot} coins instantly!`,
-        winnerName: winner.name,
-        amount: pot
-    });
+    const room = rooms.get(roomCode);
+    endRound(roomCode, winner);
 }
 
 function handleInstantLoss(roomCode) {
-    let room = rooms[roomCode];
-    let pot = Object.values(room.bets).reduce((sum, bet) => sum + bet, 0);
-    let winner = room.players.find(p => !room.rolls[p.id] || room.rolls[p.id].point !== -Infinity) || room.players[0];
-    winner.coins += pot;
-    io.to(roomCode).emit('gameOver', {
-        message: `${room.players[room.currentTurn].name} rolled 1-2-3! ${winner.name} wins ${pot} coins by default!`,
-        winnerName: winner.name,
-        amount: pot
-    });
+    const room = rooms.get(roomCode);
+    const winner = room.players.find(p => !room.rolls.get(p.id)?.result.includes("Loss")) || room.players[0];
+    endRound(roomCode, winner);
 }
 
 function determineWinner(roomCode) {
-    let room = rooms[roomCode];
-    let pot = Object.values(room.bets).reduce((sum, bet) => sum + bet, 0);
+    const room = rooms.get(roomCode);
     let highestPoint = -Infinity;
     let winner = null;
-
-    for (let playerId in room.rolls) {
-        let roll = room.rolls[playerId];
-        if (roll.point >= highestPoint) {
+    for (const [id, roll] of room.rolls) {
+        if (roll.point > highestPoint) {
             highestPoint = roll.point;
-            winner = room.players.find(p => p.id === playerId);
+            winner = room.players.find(p => p.id === id);
         }
     }
+    endRound(roomCode, winner || room.players[0]);
+}
 
-    if (winner) {
-        winner.coins += pot;
-        if (highestPoint === 0) {
-            io.to(roomCode).emit('gameOver', {
-                message: `No points scored! ${winner.name} wins ${pot} coins by default!`,
-                winnerName: winner.name,
-                amount: pot
-            });
-        } else {
-            io.to(roomCode).emit('gameOver', {
-                message: `${winner.name} wins with ${highestPoint} points! Pot: ${pot} coins.`,
-                winnerName: winner.name,
-                amount: pot
-            });
-        }
-    } else {
-        io.to(roomCode).emit('gameOver', {
-            message: `No valid rolls! Pot of ${pot} coins is lost.`,
-            winnerName: null,
-            amount: 0
+function endRound(roomCode, winner) {
+    const room = rooms.get(roomCode);
+    const pot = Array.from(room.bets.values()).reduce((sum, bet) => sum + bet, 0);
+    winner.coins += pot;
+    room.wins.set(winner.id, (room.wins.get(winner.id) || 0) + 1);
+    room.roundCount++;
+    
+    io.to(roomCode).emit('gameOver', {
+        message: `${winner.name} wins this round with ${pot} coins!`,
+        winnerName: winner.name,
+        amount: pot,
+        roundCount: room.roundCount,
+        maxRounds: room.maxRounds,
+        wins: Object.fromEntries(room.wins)
+    });
+
+    if (room.roundCount >= room.maxRounds) {
+        const overallWinner = Array.from(room.wins.entries())
+            .reduce((a, b) => a[1] > b[1] ? a : b)[0];
+        const winnerPlayer = room.players.find(p => p.id === overallWinner);
+        io.to(roomCode).emit('matchOver', {
+            message: `${winnerPlayer.name} wins the match with ${room.wins.get(overallWinner)} rounds!`,
+            winnerName: winnerPlayer.name
         });
+        resetMatch(roomCode);
+    } else {
+        resetRound(roomCode);
     }
 }
 
 function resetRound(roomCode) {
-    let room = rooms[roomCode];
-    if (room.turnTimer) clearTimeout(room.turnTimer);
-    room.bets = {};
-    room.rolls = {};
+    const room = rooms.get(roomCode);
+    clearTimeout(room.turnTimer);
+    room.bets.clear();
+    room.rolls.clear();
     room.currentTurn = 0;
     room.roundActive = false;
     room.rematchVotes.clear();
-    io.to(roomCode).emit('updatePlayers', room.players);
     io.to(roomCode).emit('roundReset');
+    broadcastRoomUpdate(roomCode);
+}
+
+function resetMatch(roomCode) {
+    const room = rooms.get(roomCode);
+    clearTimeout(room.turnTimer);
+    room.bets.clear();
+    room.rolls.clear();
+    room.currentTurn = 0;
+    room.roundActive = false;
+    room.rematchVotes.clear();
+    room.roundCount = 0;
+    room.wins.clear();
+    io.to(roomCode).emit('matchReset');
+    broadcastRoomUpdate(roomCode);
+}
+
+function broadcastRoomUpdate(roomCode) {
+    const room = rooms.get(roomCode);
+    if (!room) return;
+    io.to(roomCode).emit('updatePlayers', room.players);
+    io.to(roomCode).emit('roomStatus', { canPlay: room.players.length >= 2 });
 }
 
 server.listen(process.env.PORT || 3000, () => console.log(`Server running on port ${process.env.PORT || 3000}`));
