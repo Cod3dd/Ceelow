@@ -19,19 +19,30 @@ if (fs.existsSync(DATA_FILE)) {
     playersData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 }
 
-const rooms = new Map(); // Only one room ("lobby") for now
-const activeSockets = new Map(); // Track logged-in users
+const rooms = new Map();
+const activeSockets = new Map();
 
 io.on('connection', (socket) => {
+    socket.on('createAccount', ({ username, password }) => {
+        if (playersData[username]) {
+            socket.emit('accountError', 'Username already taken');
+            return;
+        }
+        playersData[username] = { password, coins: 100 };
+        savePlayersData();
+        socket.emit('accountCreated', { username, coins: 100 });
+    });
+
     socket.on('login', ({ username, password }) => {
         if (activeSockets.has(username)) {
             socket.emit('loginError', 'Already logged in elsewhere');
             return;
         }
         if (!playersData[username]) {
-            playersData[username] = { password, coins: 100 };
-            savePlayersData();
-        } else if (playersData[username].password !== password) {
+            socket.emit('loginError', 'Username not found');
+            return;
+        }
+        if (playersData[username].password !== password) {
             socket.emit('loginError', 'Wrong password');
             return;
         }
@@ -41,7 +52,7 @@ io.on('connection', (socket) => {
 
     socket.on('joinRoom', ({ username }) => {
         if (!activeSockets.has(username) || activeSockets.get(username) !== socket.id) return;
-        const roomCode = 'lobby'; // Fixed room for simplicity
+        const roomCode = 'lobby';
         socket.join(roomCode);
         if (!rooms.has(roomCode)) {
             rooms.set(roomCode, { players: [], bets: new Map(), rolls: new Map(), turn: 0, active: false });
@@ -124,7 +135,7 @@ io.on('connection', (socket) => {
             dice = [1, 2, 3].map(() => Math.floor(Math.random() * 6) + 1);
             result = getCeeloResult(dice);
             attempts++;
-            if (attempts > 10) return [1, 1, 1]; // Fallback
+            if (attempts > 10) return [1, 1, 1];
         } while (!isValidResult(result));
         return dice;
     }
