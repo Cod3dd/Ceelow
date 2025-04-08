@@ -8,11 +8,7 @@
         body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
         #game { display: none; }
         #players p { margin: 5px; }
-        .active { font-weight: bold; color: green; }
-        .spinning { display: inline-block; animation: spin 0.5s infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         #dice span { font-size: 24px; margin: 0 10px; }
-        #messages { border: 1px solid #ccc; height: 100px; overflow-y: auto; margin: 10px 0; padding: 5px; }
     </style>
 </head>
 <body>
@@ -26,10 +22,6 @@
     <div id="game">
         <h1>Ceelo</h1>
         <p>Player: <span id="player-name"></span> | Coins: <span id="coins"></span></p>
-        <select id="game-mode">
-            <option value="1">Single Round</option>
-            <option value="3">Best of 3</option>
-        </select>
         <div id="players"></div>
         <input type="number" id="bet-amount" placeholder="Bet Amount" min="1">
         <button id="bet-btn">Bet</button>
@@ -42,12 +34,6 @@
         </div>
         <p id="result"></p>
         <p id="turn"></p>
-        <p id="timer">Time Left: --</p>
-        <div id="chat">
-            <div id="messages"></div>
-            <input type="text" id="chat-input" placeholder="Chat...">
-            <button id="send-chat">Send</button>
-        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
