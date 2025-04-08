@@ -6,17 +6,26 @@
     <title>Ceelo Casino</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
-        #game { display: none; }
+        #login-form, #game { display: none; }
         #players p { margin: 5px; }
         #dice span { font-size: 24px; margin: 0 10px; }
     </style>
 </head>
 <body>
+    <div id="create-form">
+        <h1>Create Account</h1>
+        <input type="text" id="create-username" placeholder="Username">
+        <input type="password" id="create-password" placeholder="Password">
+        <button id="create-btn">Create</button>
+        <p><button id="show-login">Already have an account? Login</button></p>
+    </div>
+
     <div id="login-form">
         <h1>Login to Ceelo</h1>
-        <input type="text" id="username" placeholder="Username">
-        <input type="password" id="password" placeholder="Password">
+        <input type="text" id="login-username" placeholder="Username">
+        <input type="password" id="login-password" placeholder="Password">
         <button id="login-btn">Login</button>
+        <p><button id="show-create">Need an account? Create one</button></p>
     </div>
 
     <div id="game">
