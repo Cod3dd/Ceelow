@@ -102,6 +102,15 @@ socket.on('roomStatus', ({ canPlay }) => {
     updateResult(canPlay ? 'Place your bets!' : 'Waiting for another player...');
 });
 
+socket.on('betPlaced', ({ username, bet, highestBet }) => {
+    updateResult(`${username} bets ${bet}. Minimum bet now: ${highestBet}`);
+});
+
+socket.on('betError', (msg) => {
+    document.getElementById('bet-btn').disabled = false;
+    updateResult(msg);
+});
+
 socket.on('nextTurn', ({ playerName }) => {
     document.getElementById('turn').textContent = `Turn: ${playerName}`;
     document.getElementById('roll-btn').disabled = playerName !== myUsername;
