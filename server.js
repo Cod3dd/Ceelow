@@ -12,24 +12,24 @@ const io = socketIo(server, {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Load/save player data
+// Player data persistence
 const DATA_FILE = './players.json';
 let playersData = {};
 if (fs.existsSync(DATA_FILE)) {
     playersData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 }
 
-const rooms = new Map();
+const rooms = new Map(); // Only one room ("lobby") for now
 const activeSockets = new Map(); // Track logged-in users
 
 io.on('connection', (socket) => {
     socket.on('login', ({ username, password }) => {
         if (activeSockets.has(username)) {
-            socket.emit('loginError', 'User already logged in elsewhere');
+            socket.emit('loginError', 'Already logged in elsewhere');
             return;
         }
         if (!playersData[username]) {
-            playersData[username] = { password, coins: 100 }; // New player
+            playersData[username] = { password, coins: 100 };
             savePlayersData();
         } else if (playersData[username].password !== password) {
             socket.emit('loginError', 'Wrong password');
@@ -39,38 +39,42 @@ io.on('connection', (socket) => {
         socket.emit('loginSuccess', { username, coins: playersData[username].coins });
     });
 
-    socket.on('joinRoom', ({ roomCode, username }) => {
+    socket.on('joinRoom', ({ username }) => {
         if (!activeSockets.has(username) || activeSockets.get(username) !== socket.id) return;
+        const roomCode = 'lobby'; // Fixed room for simplicity
         socket.join(roomCode);
-        if (!rooms.has(roomCode)) rooms.set(roomCode, { players: [], bets: new Map(), rolls: new Map(), turn: 0, active: false });
+        if (!rooms.has(roomCode)) {
+            rooms.set(roomCode, { players: [], bets: new Map(), rolls: new Map(), turn: 0, active: false });
+        }
         const room = rooms.get(roomCode);
         const player = { id: socket.id, name: username, coins: playersData[username].coins };
-        if (room.players.some(p => p.name === player.name)) return; // Already in room
-        room.players.push(player);
+        if (!room.players.some(p => p.name === player.name)) {
+            room.players.push(player);
+        }
         socket.emit('joined', { roomCode, player });
         io.to(roomCode).emit('updatePlayers', room.players);
         io.to(roomCode).emit('roomStatus', { canPlay: room.players.length >= 2 });
     });
 
-    socket.on('placeBet', ({ roomCode, username, bet }) => {
-        const room = rooms.get(roomCode);
-        if (!room || room.players.length < 2 || room.active) return;
+    socket.on('placeBet', ({ username, bet }) => {
+        const room = rooms.get('lobby');
+        if (!room || room.active || room.players.length < 2) return;
         const player = room.players.find(p => p.name === username);
         if (player && player.coins >= bet && !room.bets.has(player.id)) {
             room.bets.set(player.id, bet);
             player.coins -= bet;
             playersData[username].coins = player.coins;
             savePlayersData();
-            io.to(roomCode).emit('updatePlayers', room.players);
+            io.to('lobby').emit('updatePlayers', room.players);
             if (room.bets.size === room.players.length) {
                 room.active = true;
-                io.to(roomCode).emit('nextTurn', { playerName: room.players[0].name });
+                io.to('lobby').emit('nextTurn', { playerName: room.players[0].name });
             }
         }
     });
 
-    socket.on('rollDice', ({ roomCode, username }) => {
-        const room = rooms.get(roomCode);
+    socket.on('rollDice', ({ username }) => {
+        const room = rooms.get('lobby');
         if (!room || !room.active || room.players.length < 2) return;
         const player = room.players[room.turn];
         if (player.name !== username || player.id !== socket.id) return;
@@ -79,19 +83,19 @@ io.on('connection', (socket) => {
         const result = getCeeloResult(dice);
         const point = calculatePoint(result);
         room.rolls.set(player.id, { dice, result, point });
-        io.to(roomCode).emit('diceRolled', { player: player.name, dice, result });
+        io.to('lobby').emit('diceRolled', { player: player.name, dice, result });
 
         if (result.includes("Win")) {
-            endRound(roomCode, player);
+            endRound(room, player);
         } else if (result.includes("Loss")) {
             const winner = room.players.find(p => p.id !== player.id) || room.players[0];
-            endRound(roomCode, winner);
+            endRound(room, winner);
         } else {
             room.turn = (room.turn + 1) % room.players.length;
             if (room.rolls.size === room.players.length) {
-                determineWinner(roomCode);
+                determineWinner(room);
             } else {
-                io.to(roomCode).emit('nextTurn', { playerName: room.players[room.turn].name });
+                io.to('lobby').emit('nextTurn', { playerName: room.players[room.turn].name });
             }
         }
     });
@@ -99,15 +103,16 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const username = [...activeSockets.entries()].find(([_, id]) => id === socket.id)?.[0];
         if (username) activeSockets.delete(username);
-        for (const [roomCode, room] of rooms) {
+        const room = rooms.get('lobby');
+        if (room) {
             const playerIdx = room.players.findIndex(p => p.id === socket.id);
             if (playerIdx !== -1) {
                 room.players.splice(playerIdx, 1);
                 room.bets.delete(socket.id);
                 room.rolls.delete(socket.id);
-                io.to(roomCode).emit('updatePlayers', room.players);
-                io.to(roomCode).emit('roomStatus', { canPlay: room.players.length >= 2 });
-                if (room.players.length === 0) rooms.delete(roomCode);
+                io.to('lobby').emit('updatePlayers', room.players);
+                io.to('lobby').emit('roomStatus', { canPlay: room.players.length >= 2 });
+                if (room.players.length === 0) rooms.delete('lobby');
             }
         }
     });
@@ -148,22 +153,20 @@ io.on('connection', (socket) => {
         return result.includes("Win") || result.includes("Loss") || result.includes("Trips") || result.includes("Pair");
     }
 
-    function endRound(roomCode, winner) {
-        const room = rooms.get(roomCode);
+    function endRound(room, winner) {
         const pot = Array.from(room.bets.values()).reduce((a, b) => a + b, 0);
         winner.coins += pot;
         playersData[winner.name].coins = winner.coins;
         savePlayersData();
-        io.to(roomCode).emit('gameOver', { message: `${winner.name} wins ${pot} coins with ${room.rolls.get(winner.id).result}!` });
+        io.to('lobby').emit('gameOver', { message: `${winner.name} wins ${pot} coins with ${room.rolls.get(winner.id).result}!` });
         room.active = false;
         room.bets.clear();
         room.rolls.clear();
         room.turn = 0;
-        io.to(roomCode).emit('roundReset');
+        io.to('lobby').emit('roundReset');
     }
 
-    function determineWinner(roomCode) {
-        const room = rooms.get(roomCode);
+    function determineWinner(room) {
         let highestPoint = -Infinity;
         let winner = null;
         for (const [id, roll] of room.rolls) {
@@ -172,7 +175,7 @@ io.on('connection', (socket) => {
                 winner = room.players.find(p => p.id === id);
             }
         }
-        endRound(roomCode, winner || room.players[0]);
+        endRound(room, winner || room.players[0]);
     }
 });
 
