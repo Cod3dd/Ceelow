@@ -4,39 +4,37 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ceelo</title>
-    <link rel="stylesheet" href="styles.css">
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
+        #game { display: none; }
+        #players p { margin: 5px; }
+        .active { font-weight: bold; color: green; }
+        .spinning { display: inline-block; animation: spin 0.5s infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        #dice span { font-size: 24px; margin: 0 10px; }
+        #messages { border: 1px solid #ccc; height: 100px; overflow-y: auto; margin: 10px 0; padding: 5px; }
+    </style>
 </head>
 <body>
-    <div id="instructions-modal" class="modal">
-        <div class="modal-content">
-            <h2>Welcome to Ceelo!</h2>
-            <p>Rules: Roll 3 dice. 4-5-6 is an instant win, 1-2-3 is an instant loss. Pairs set a point with the third die. Highest point wins the pot!</p>
-            <button id="instructions-ok">Got it!</button>
-        </div>
-    </div>
-
     <div id="room-setup">
-        <h1>Join a Game</h1>
-        <input type="text" id="username" placeholder="Your Alias">
+        <h1>Join Ceelo</h1>
+        <input type="text" id="username" placeholder="Username">
         <input type="text" id="room-code" placeholder="Room Code">
-        <button id="join-btn">Join Table</button>
+        <button id="join-btn">Join</button>
     </div>
 
-    <div id="loading" style="display: none;">Loading...</div>
-
-    <div id="game" style="display: none;">
+    <div id="game">
         <h1>Ceelo</h1>
         <p>Player: <span id="player-name"></span> | Coins: <span id="coins"></span></p>
         <select id="game-mode">
-            <option value="single">Single Round</option>
-            <option value="bestOf3">Best of 3</option>
+            <option value="1">Single Round</option>
+            <option value="3">Best of 3</option>
         </select>
         <div id="players"></div>
-        <input type="number" id="bet-amount" placeholder="Bet Amount">
-        <button id="bet-btn">Place Bet</button>
-        <button id="roll-btn" disabled>Roll Dice</button>
-        <button id="rematch-btn" style="display: none;">Rematch</button>
-        <button id="leave-btn">Leave Table</button>
+        <input type="number" id="bet-amount" placeholder="Bet Amount" min="1">
+        <button id="bet-btn">Bet</button>
+        <button id="roll-btn">Roll</button>
+        <button id="leave-btn">Leave</button>
         <div id="dice">
             <span id="die1">-</span>
             <span id="die2">-</span>
@@ -49,13 +47,6 @@
             <div id="messages"></div>
             <input type="text" id="chat-input" placeholder="Chat...">
             <button id="send-chat">Send</button>
-        </div>
-    </div>
-
-    <div id="winner-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <p id="winner-text"></p>
-            <button id="modal-ok">OK</button>
         </div>
     </div>
 
