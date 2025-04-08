@@ -53,6 +53,7 @@ document.getElementById('leave-btn').addEventListener('click', () => {
 socket.on('accountCreated', ({ username, coins }) => {
     myUsername = username;
     document.getElementById('create-form').style.display = 'none';
+    document.getElementById('login-form').style.display = 'none';
     document.getElementById('game').style.display = 'block';
     document.getElementById('player-name').textContent = username;
     document.getElementById('coins').textContent = coins;
@@ -66,6 +67,7 @@ socket.on('accountError', (msg) => {
 
 socket.on('loginSuccess', ({ username, coins }) => {
     myUsername = username;
+    document.getElementById('create-form').style.display = 'none';
     document.getElementById('login-form').style.display = 'none';
     document.getElementById('game').style.display = 'block';
     document.getElementById('player-name').textContent = username;
@@ -75,6 +77,11 @@ socket.on('loginSuccess', ({ username, coins }) => {
 
 socket.on('loginError', (msg) => {
     document.getElementById('login-btn').disabled = false;
+    alert(msg);
+});
+
+socket.on('joinError', (msg) => {
+    document.getElementById('join-btn').disabled = false;
     alert(msg);
 });
 
