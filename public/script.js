@@ -1,5 +1,4 @@
 const socket = io(window.location.origin);
-let roomCode = null;
 let myUsername = null;
 
 document.getElementById('login-btn').addEventListener('click', () => {
@@ -11,21 +10,20 @@ document.getElementById('login-btn').addEventListener('click', () => {
 });
 
 document.getElementById('join-btn').addEventListener('click', () => {
-    roomCode = document.getElementById('room-code').value.trim();
-    if (!roomCode || !myUsername) return alert('Log in and enter room code');
+    if (!myUsername) return alert('Log in first');
     document.getElementById('join-btn').disabled = true;
-    socket.emit('joinRoom', { roomCode, username: myUsername });
+    socket.emit('joinRoom', { username: myUsername });
 });
 
 document.getElementById('bet-btn').addEventListener('click', () => {
     const bet = parseInt(document.getElementById('bet-amount').value);
     if (isNaN(bet) || bet <= 0 || bet > parseInt(document.getElementById('coins').textContent)) return updateResult('Invalid bet');
-    socket.emit('placeBet', { roomCode, username: myUsername, bet });
+    socket.emit('placeBet', { username: myUsername, bet });
     document.getElementById('bet-btn').disabled = true;
 });
 
 document.getElementById('roll-btn').addEventListener('click', () => {
-    socket.emit('rollDice', { roomCode, username: myUsername });
+    socket.emit('rollDice', { username: myUsername });
 });
 
 document.getElementById('leave-btn').addEventListener('click', () => {
@@ -37,10 +35,10 @@ document.getElementById('leave-btn').addEventListener('click', () => {
 socket.on('loginSuccess', ({ username, coins }) => {
     myUsername = username;
     document.getElementById('login-form').style.display = 'none';
-    document.getElementById('room-setup').style.display = 'block';
-    document.getElementById('login-btn').disabled = false;
+    document.getElementById('game').style.display = 'block';
     document.getElementById('player-name').textContent = username;
     document.getElementById('coins').textContent = coins;
+    document.getElementById('login-btn').disabled = false;
 });
 
 socket.on('loginError', (msg) => {
@@ -48,10 +46,7 @@ socket.on('loginError', (msg) => {
     alert(msg);
 });
 
-socket.on('joined', ({ roomCode: rc, player }) => {
-    roomCode = rc;
-    document.getElementById('room-setup').style.display = 'none';
-    document.getElementById('game').style.display = 'block';
+socket.on('joined', ({ player }) => {
     document.getElementById('coins').textContent = player.coins;
     document.getElementById('join-btn').disabled = false;
 });
@@ -89,7 +84,7 @@ socket.on('roundReset', () => {
     document.getElementById('bet-btn').disabled = false;
     document.getElementById('roll-btn').disabled = true;
     ['die1', 'die2', 'die3'].forEach(id => document.getElementById(id).textContent = '-');
-    updateResult(roomCode && rooms.get(roomCode)?.players.length >= 2 ? 'Place your bets!' : 'Waiting for another player...');
+    updateResult('Place your bets!');
     document.getElementById('turn').textContent = '';
 });
 
@@ -99,11 +94,9 @@ function updateResult(message) {
 
 function resetUI() {
     document.getElementById('game').style.display = 'none';
-    document.getElementById('room-setup').style.display = 'none';
     document.getElementById('login-form').style.display = 'block';
     document.getElementById('username').value = '';
     document.getElementById('password').value = '';
-    document.getElementById('room-code').value = '';
     document.getElementById('player-name').textContent = '';
     document.getElementById('coins').textContent = '';
     document.getElementById('players').innerHTML = '';
@@ -113,6 +106,5 @@ function resetUI() {
     ['die1', 'die2', 'die3'].forEach(id => document.getElementById(id).textContent = '-');
     updateResult('');
     document.getElementById('turn').textContent = '';
-    roomCode = null;
     myUsername = null;
 }
