@@ -6,7 +6,7 @@
     <title>Ceelo Casino</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
-        #room-setup, #game { display: none; }
+        #game { display: none; }
         #players p { margin: 5px; }
         #dice span { font-size: 24px; margin: 0 10px; }
     </style>
@@ -19,15 +19,10 @@
         <button id="login-btn">Login</button>
     </div>
 
-    <div id="room-setup">
-        <h1>Join a Room</h1>
-        <input type="text" id="room-code" placeholder="Room Code">
-        <button id="join-btn">Join</button>
-    </div>
-
     <div id="game">
         <h1>Ceelo</h1>
         <p>Player: <span id="player-name"></span> | Coins: <span id="coins"></span></p>
+        <button id="join-btn">Join Lobby</button>
         <div id="players"></div>
         <input type="number" id="bet-amount" placeholder="Bet Amount" min="1">
         <button id="bet-btn">Bet</button>
