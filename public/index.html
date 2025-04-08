@@ -3,18 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ceelo</title>
+    <title>Ceelo Casino</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
-        #game { display: none; }
+        #room-setup, #game { display: none; }
         #players p { margin: 5px; }
         #dice span { font-size: 24px; margin: 0 10px; }
     </style>
 </head>
 <body>
-    <div id="room-setup">
-        <h1>Join Ceelo</h1>
+    <div id="login-form">
+        <h1>Login to Ceelo</h1>
         <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
+        <button id="login-btn">Login</button>
+    </div>
+
+    <div id="room-setup">
+        <h1>Join a Room</h1>
         <input type="text" id="room-code" placeholder="Room Code">
         <button id="join-btn">Join</button>
     </div>
