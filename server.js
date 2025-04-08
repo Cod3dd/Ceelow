@@ -30,6 +30,7 @@ io.on('connection', (socket) => {
         }
         playersData[username] = { password, coins: 100 };
         savePlayersData();
+        activeSockets.set(username, socket.id); // Auto-login on creation
         socket.emit('accountCreated', { username, coins: 100 });
     });
 
@@ -115,16 +116,19 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         const username = [...activeSockets.entries()].find(([_, id]) => id === socket.id)?.[0];
-        if (username) activeSockets.delete(username);
-        for (const [roomCode, room] of rooms) {
-            const playerIdx = room.players.findIndex(p => p.id === socket.id);
-            if (playerIdx !== -1) {
-                room.players.splice(playerIdx, 1);
-                room.bets.delete(socket.id);
-                room.rolls.delete(socket.id);
-                io.to(roomCode).emit('updatePlayers', room.players);
-                io.to(roomCode).emit('roomStatus', { canPlay: room.players.length >= 2 });
-                if (room.players.length === 0) rooms.delete(roomCode);
+        if (username) {
+            activeSockets.delete(username);
+            const room = rooms.get('lobby');
+            if (room) {
+                const playerIdx = room.players.findIndex(p => p.id === socket.id);
+                if (playerIdx !== -1) {
+                    room.players.splice(playerIdx, 1);
+                    room.bets.delete(socket.id);
+                    room.rolls.delete(socket.id);
+                    io.to('lobby').emit('updatePlayers', room.players);
+                    io.to('lobby').emit('roomStatus', { canPlay: room.players.length >= 2 });
+                    if (room.players.length === 0) rooms.delete('lobby');
+                }
             }
         }
     });
