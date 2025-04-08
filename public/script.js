@@ -62,8 +62,10 @@ socket.on('nextTurn', ({ playerName }) => {
 });
 
 socket.on('diceRolled', ({ player, dice, result }) => {
-    ['die1', 'die2', 'die3'].forEach((id, i) => document.getElementById(id).textContent = dice[i]);
-    updateResult(`${player}: ${result}`);
+    setTimeout(() => {
+        ['die1', 'die2', 'die3'].forEach((id, i) => document.getElementById(id).textContent = dice[i]);
+        updateResult(`${player}: ${result}`);
+    }, result.includes("Rerolling") ? 1500 : 0);
 });
 
 socket.on('gameOver', ({ message }) => {
