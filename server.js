@@ -78,21 +78,20 @@ io.on('connection', (socket) => {
             return;
         }
         const player = room.players.find(p => p.name === username);
-        const minCoins = Math.min(...room.players.map(p => p.coins));
-        if (player && player.coins >= bet && bet >= room.highestBet && bet <= minCoins && !room.bets.has(player.id)) {
-            room.bets.set(player.id, bet);
-            room.highestBet = Math.max(room.highestBet, bet); // Update highest bet
-            player.coins -= bet;
-            playersData[username].coins = player.coins;
-            savePlayersData();
-            io.to('lobby').emit('updatePlayers', room.players);
-            io.to('lobby').emit('betPlaced', { username, bet, highestBet: room.highestBet });
-            if (room.bets.size === room.players.length) {
-                room.active = true;
-                io.to('lobby').emit('nextTurn', { playerName: room.players[0].name });
-            }
-        } else {
-            socket.emit('betError', `Bet must be ${room.highestBet} to ${minCoins}`);
+        if (!player || player.coins < bet || bet < room.highestBet || room.bets.has(player.id)) {
+            socket.emit('betError', `Bet must be ${room.highestBet} to ${player.coins}`);
+            return;
+        }
+        room.bets.set(player.id, bet);
+        room.highestBet = Math.max(room.highestBet, bet); // Update highest bet
+        player.coins -= bet;
+        playersData[username].coins = player.coins;
+        savePlayersData();
+        io.to('lobby').emit('updatePlayers', room.players);
+        io.to('lobby').emit('betPlaced', { username, bet, highestBet: room.highestBet });
+        if (room.bets.size === room.players.length) {
+            room.active = true;
+            io.to('lobby').emit('nextTurn', { playerName: room.players[0].name });
         }
     });
 
@@ -188,7 +187,7 @@ io.on('connection', (socket) => {
         room.bets.clear();
         room.rolls.clear();
         room.turn = 0;
-        room.highestBet = 0; // Reset for next round
+        room.highestBet = 0;
         io.to('lobby').emit('roundReset');
     }
 
