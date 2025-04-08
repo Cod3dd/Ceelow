@@ -50,9 +50,11 @@ io.on('connection', (socket) => {
         socket.emit('loginSuccess', { username, coins: playersData[username].coins });
     });
 
-    socket.on('joinRoom', ({ username }) => {
-        if (!activeSockets.has(username) || activeSockets.get(username) !== socket.id) return;
-        const roomCode = 'lobby';
+    socket.on('joinRoom', ({ username, roomCode = 'lobby' }) => {
+        if (!activeSockets.has(username) || activeSockets.get(username) !== socket.id) {
+            socket.emit('joinError', 'Not logged in');
+            return;
+        }
         socket.join(roomCode);
         if (!rooms.has(roomCode)) {
             rooms.set(roomCode, { players: [], bets: new Map(), rolls: new Map(), turn: 0, active: false });
@@ -114,16 +116,15 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const username = [...activeSockets.entries()].find(([_, id]) => id === socket.id)?.[0];
         if (username) activeSockets.delete(username);
-        const room = rooms.get('lobby');
-        if (room) {
+        for (const [roomCode, room] of rooms) {
             const playerIdx = room.players.findIndex(p => p.id === socket.id);
             if (playerIdx !== -1) {
                 room.players.splice(playerIdx, 1);
                 room.bets.delete(socket.id);
                 room.rolls.delete(socket.id);
-                io.to('lobby').emit('updatePlayers', room.players);
-                io.to('lobby').emit('roomStatus', { canPlay: room.players.length >= 2 });
-                if (room.players.length === 0) rooms.delete('lobby');
+                io.to(roomCode).emit('updatePlayers', room.players);
+                io.to(roomCode).emit('roomStatus', { canPlay: room.players.length >= 2 });
+                if (room.players.length === 0) rooms.delete(roomCode);
             }
         }
     });
