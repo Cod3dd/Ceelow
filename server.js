@@ -30,7 +30,7 @@ io.on('connection', (socket) => {
         }
         playersData[username] = { password, coins: 100 };
         savePlayersData();
-        activeSockets.set(username, socket.id); // Auto-login on creation
+        activeSockets.set(username, socket.id);
         socket.emit('accountCreated', { username, coins: 100 });
     });
 
@@ -58,7 +58,7 @@ io.on('connection', (socket) => {
         }
         socket.join(roomCode);
         if (!rooms.has(roomCode)) {
-            rooms.set(roomCode, { players: [], bets: new Map(), rolls: new Map(), turn: 0, active: false });
+            rooms.set(roomCode, { players: [], bets: new Map(), rolls: new Map(), turn: 0, active: false, highestBet: 0 });
         }
         const room = rooms.get(roomCode);
         const player = { id: socket.id, name: username, coins: playersData[username].coins };
@@ -67,23 +67,32 @@ io.on('connection', (socket) => {
         }
         socket.emit('joined', { roomCode, player });
         io.to(roomCode).emit('updatePlayers', room.players);
-        io.to(roomCode).emit('roomStatus', { canPlay: room.players.length >= 2 });
+        io.to(roomCode).emit('roomStatus', { canPlay: room.players.length >= 2 && room.players.every(p => p.coins > 0) });
     });
 
     socket.on('placeBet', ({ username, bet }) => {
         const room = rooms.get('lobby');
         if (!room || room.active || room.players.length < 2) return;
+        if (room.players.some(p => p.coins === 0)) {
+            io.to('lobby').emit('betError', 'A player has 0 coins—betting paused');
+            return;
+        }
         const player = room.players.find(p => p.name === username);
-        if (player && player.coins >= bet && !room.bets.has(player.id)) {
+        const minCoins = Math.min(...room.players.map(p => p.coins));
+        if (player && player.coins >= bet && bet >= room.highestBet && bet <= minCoins && !room.bets.has(player.id)) {
             room.bets.set(player.id, bet);
+            room.highestBet = Math.max(room.highestBet, bet); // Update highest bet
             player.coins -= bet;
             playersData[username].coins = player.coins;
             savePlayersData();
             io.to('lobby').emit('updatePlayers', room.players);
+            io.to('lobby').emit('betPlaced', { username, bet, highestBet: room.highestBet });
             if (room.bets.size === room.players.length) {
                 room.active = true;
                 io.to('lobby').emit('nextTurn', { playerName: room.players[0].name });
             }
+        } else {
+            socket.emit('betError', `Bet must be ${room.highestBet} to ${minCoins}`);
         }
     });
 
@@ -126,7 +135,7 @@ io.on('connection', (socket) => {
                     room.bets.delete(socket.id);
                     room.rolls.delete(socket.id);
                     io.to('lobby').emit('updatePlayers', room.players);
-                    io.to('lobby').emit('roomStatus', { canPlay: room.players.length >= 2 });
+                    io.to('lobby').emit('roomStatus', { canPlay: room.players.length >= 2 && room.players.every(p => p.coins > 0) });
                     if (room.players.length === 0) rooms.delete('lobby');
                 }
             }
@@ -179,6 +188,7 @@ io.on('connection', (socket) => {
         room.bets.clear();
         room.rolls.clear();
         room.turn = 0;
+        room.highestBet = 0; // Reset for next round
         io.to('lobby').emit('roundReset');
     }
 
