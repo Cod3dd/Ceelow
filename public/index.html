@@ -10,15 +10,24 @@
         #players p { margin: 5px; }
         #dice span { font-size: 24px; margin: 0 10px; }
         #chat-log, #public-chat-log { 
-            height: 150px; 
+            height: 200px; 
             overflow-y: auto; 
             border: 1px solid #ccc; 
             padding: 10px; 
-            margin: 10px 0; 
+            margin: 10px auto; 
             text-align: left;
+            max-width: 600px;
+            background-color: #f9f9f9;
         }
-        #chat-input, #public-chat-input { width: 200px; }
+        #chat-log div, #public-chat-log div { margin: 5px 0; }
+        #chat-input, #public-chat-input { 
+            width: 300px; 
+            padding: 5px; 
+            margin-right: 5px; 
+        }
         #leave-room-btn { display: none; margin-top: 10px; }
+        button { padding: 8px 16px; margin: 5px; }
+        input, select { padding: 8px; margin: 5px; }
     </style>
 </head>
 <body>
@@ -43,11 +52,6 @@
         <p>Player: <span id="player-name"></span> | Coins: <span id="coins"></span></p>
         <div>
             <h3>Create Private Room</h3>
-            <select id="game-mode">
-                <option value="single">Single Round</option>
-                <option value="bo3">Best of 3</option>
-                <option value="bo5">Best of 5</option>
-            </select>
             <button id="create-room-btn">Create Room</button>
             <p id="room-code-display"></p>
             <button id="leave-room-btn">Leave Room</button>
@@ -60,7 +64,7 @@
         <div>
             <h3>Public Chat</h3>
             <div id="public-chat-log"></div>
-            <input type="text" id="public-chat-input" placeholder="Type a message...">
+            <input type="text" id="public-chat-input" placeholder="Type a message..." maxlength="200">
             <button id="public-chat-btn">Send</button>
         </div>
     </div>
@@ -89,8 +93,9 @@
         <p id="result"></p>
         <p id="turn"></p>
         <div id="chat">
+            <h3>Room Chat</h3>
             <div id="chat-log"></div>
-            <input type="text" id="chat-input" placeholder="Type a message...">
+            <input type="text" id="chat-input" placeholder="Type a message..." maxlength="200">
             <button id="chat-btn">Send</button>
         </div>
     </div>
