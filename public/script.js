@@ -42,6 +42,11 @@ document.getElementById('join-room-btn').addEventListener('click', () => {
     socket.emit('joinRoom', { username: myUsername, roomCode });
 });
 
+document.getElementById('leave-room-btn').addEventListener('click', () => {
+    socket.emit('leaveRoom', { username: myUsername });
+    resetUI();
+});
+
 document.getElementById('public-chat-btn').addEventListener('click', () => {
     const message = document.getElementById('public-chat-input').value.trim();
     if (!message) return;
@@ -127,6 +132,7 @@ socket.on('receivePublicChat', (msg) => {
 socket.on('roomCreated', ({ roomCode, gameMode }) => {
     document.getElementById('room-code-display').textContent = `Room Code: ${roomCode.trim()} (${gameMode.toUpperCase()})`;
     document.getElementById('create-room-btn').disabled = false;
+    document.getElementById('leave-room-btn').style.display = 'block';
 });
 
 socket.on('joinError', (msg) => {
@@ -142,6 +148,7 @@ socket.on('joined', ({ player, roomCode, gameMode, chatMessages }) => {
     document.getElementById('player-name').textContent = player.name || 'Unknown';
     document.getElementById('room-info').textContent = `Room: ${roomCode} (${gameMode.toUpperCase()})`;
     document.getElementById('join-room-btn').disabled = false;
+    document.getElementById('leave-room-btn').style.display = 'none';
     chatMessages.forEach(msg => appendChatMessage(msg));
 });
 
@@ -272,6 +279,10 @@ function resetUI() {
     document.getElementById('public-chat-input').value = '';
     document.getElementById('room-info').textContent = '';
     document.getElementById('game-status').textContent = '';
+    document.getElementById('create-room-btn').disabled = false;
+    document.getElementById('join-room-btn').disabled = false;
+    document.getElementById('leave-room-btn').style.display = 'none';
+    document.getElementById('room-code-display').textContent = '';
     updateResult('');
     document.getElementById('turn').textContent = '';
 }
