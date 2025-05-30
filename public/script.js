@@ -113,7 +113,7 @@ socket.on('roomStatus', ({ canPlay, maxBet }) => {
     document.getElementById('bet-btn').disabled = !canPlay;
     document.getElementById('roll-btn').disabled = !canPlay;
     document.getElementById('bet-amount').max = maxBet;
-    updateResult(canPlay ? `Place your bets! (Max: ${maxBet})` : 'Waiting for another player...');
+    updateResult(canPlay ? `Place your bets! (Max: ${maxBet})` : 'Waiting for another player or coins...');
 });
 
 socket.on('betPlaced', ({ username, bet, requiredBet }) => {
@@ -144,10 +144,13 @@ socket.on('diceRolled', ({ player, dice, result }) => {
     updateResult(`${player}: ${result}`);
 });
 
-socket.on('gameOver', ({ message }) => {
+socket.on('gameOver', ({ message, players }) => {
     updateResult(message);
     document.getElementById('turn').textContent = '';
     document.getElementById('roll-btn').disabled = true;
+    document.getElementById('players').innerHTML = players.map(p => `<p>${p.name} - ${p.coins}</p>`).join('');
+    const me = players.find(p => p.name === myUsername);
+    if (me) document.getElementById('coins').textContent = me.coins;
 });
 
 socket.on('roundReset', () => {
@@ -159,8 +162,8 @@ socket.on('roundReset', () => {
     ['die1', 'die2', 'die3'].forEach(id => document.getElementById(id).textContent = '-');
     document.getElementById('match-amount').value = '';
     document.getElementById('match-btn').disabled = false;
-    updateResult('Place your bets!');
     document.getElementById('turn').textContent = '';
+    updateResult('Place your bets!');
 });
 
 function updateResult(message) {
