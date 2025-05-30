@@ -27,6 +27,11 @@ document.getElementById('show-create').addEventListener('click', () => {
     document.getElementById('create-form').style.display = 'block';
 });
 
+document.getElementById('logout-btn').addEventListener('click', () => {
+    if (!myUsername) return;
+    socket.emit('logout', { username: myUsername });
+});
+
 document.getElementById('create-room-btn').addEventListener('click', () => {
     if (!myUsername) return alert('Log in first');
     document.getElementById('create-room-btn').disabled = true;
@@ -118,6 +123,14 @@ socket.on('loginSuccess', ({ username, coins }) => {
 socket.on('loginError', (msg) => {
     document.getElementById('login-btn').disabled = false;
     alert(msg);
+});
+
+socket.on('loggedOut', () => {
+    myUsername = null;
+    socket.close();
+    resetUI();
+    document.getElementById('login-form').style.display = 'block';
+    socket.connect();
 });
 
 socket.on('publicChatHistory', (messages) => {
@@ -245,7 +258,7 @@ function resetUI() {
     document.getElementById('player-name').textContent = '';
     document.getElementById('coins').textContent = '';
     document.getElementById('players').innerHTML = '';
-    document.getElementById('bet-amount').value = '';
+    document.getElementologicById('bet-amount').value = '';
     document.getElementById('bet-btn').disabled = true;
     document.getElementById('roll-btn').disabled = true;
     ['die1', 'die2', 'die3'].forEach(id => document.getElementById(id).textContent = '-');
