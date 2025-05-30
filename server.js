@@ -70,6 +70,17 @@ io.on('connection', (socket) => {
         socket.emit('publicChatHistory', publicChatMessages);
     });
 
+    socket.on('logout', ({ username }) => {
+        if (!activeSockets.has(username) || activeSockets.get(username) !== socket.id) return;
+        const roomCode = [...socket.rooms].find(room => room !== socket.id && room !== 'publicChat');
+        if (roomCode) {
+            leaveRoom(socket, username, roomCode);
+        }
+        activeSockets.delete(username);
+        socket.leave('publicChat');
+        socket.emit('loggedOut');
+    });
+
     socket.on('sendPublicChat', ({ username, message }) => {
         if (!activeSockets.has(username) || activeSockets.get(username) !== socket.id) return;
         if (!message.trim() || message.length > 200) return;
@@ -254,11 +265,11 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const username = [...activeSockets.entries()].find(([_, id]) => id === socket.id)?.[0];
         if (username) {
-            activeSockets.delete(username);
             const roomCode = [...socket.rooms].find(room => room !== socket.id && room !== 'publicChat');
             if (roomCode) {
                 leaveRoom(socket, username, roomCode);
             }
+            activeSockets.delete(username);
             socket.leave('publicChat');
         }
     });
