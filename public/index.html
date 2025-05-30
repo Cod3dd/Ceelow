@@ -1,97 +1,99 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ceelo Casino</title>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
-        #login-form, #game, #match-form, #room-selection { display: none; }
-        #players p { margin: 5px; }
-        #dice span { font-size: 24px; margin: 0 10px; }
-        #chat-log { 
-            height: 150px; 
-            overflow-y: auto; 
-            border: 1px solid #ccc; 
-            padding: 10px; 
-            margin: 10px 0; 
-            text-align: left;
-        }
-        #chat-input { width: 200px; }
-    </style>
-</head>
-<body>
-    <div id="create-form">
-        <h1>Create Account</h1>
-        <input type="text" id="create-username" placeholder="Username">
-        <input type="password" id="create-password" placeholder="Password">
-        <button id="create-btn">Create</button>
-        <p><button id="show-login">Already have an account? Login</button></p>
-    </div>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Ceelo Casino</title>
+        <style>
+            body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
+            #login-form, #game, #match-div, #room-selection { display: none; }
+            #players p { margin: 5px; }
+            #dice span { font-size: 24px; margin: 0 10px; }
+            #chat-log, #public-chat-log { 
+                height: 150px; 
+                overflow-y: auto; 
+                border: 1px solid #ccc; 
+                padding: 10px; 
+                margin: 10px 0; 
+                text-align: left;
+            }
+            #chat-input, #public-chat-input { width: 200px; }
+        </style>
+    </head>
+    <body>
+        <div id="create-form">
+            <h1>Create Account</h1>
+            <input type="text" id="create-username" placeholder="Username">
+            <input type="password" id="create-password" placeholder="Password">
+            <button id="create-btn">Create</button>
+            <p><button id="show-login">Already have an account? Login</button></p>
+        </div>
 
-    <div id="login-form">
-        <h1>Login to Ceelo</h1>
-        <input type="text" id="login-username" placeholder="Username">
-        <input type="password" id="login-password" placeholder="Password">
-        <button id="login-btn">Login</button>
-        <p><button id="show-create">Need an account? Create one</button></p>
-    </div>
+        <div id="login-form">
+            <h1>Login to Ceelo</h1>
+            <input type="text" id="login-username" placeholder="Username">
+            <input type="password" id="login-password" placeholder="Password">
+            <button id="login-btn">Login</button>
+            <p><button id="show-create">Need an account? Create one</button></p>
+        </div>
 
-    <div id="room-selection">
-        <h1>Join or Create Room</h1>
-        <p>Player: <span id="player-name"></span> | Coins: <span id="coins"></span></p>
-        <div>
-            <h3>Create Private Room</h3>
-            <select id="game-mode">
-                <option value="single">Single Round</option>
-                <option value="bo3">Best of 3</option>
-                <option value="bo5">Best of 5</option>
-            </select>
-            <button id="create-room-btn">Create Room</button>
-            <p id="room-code-display"></p>
+        <div id="room-selection">
+            <h1>Join or Create Room</h1>
+            <p>Player: <span id="player-name"></span> | Coins: <span id="coins"></span></p>
+            <div>
+                <h3>Create Private Room</h3>
+                <select id="game-mode">
+                    <option value="single">Single Round</option>
+                    <option value="bo3">Best of 3</option>
+                    <option value="bo5">Best of 5</option>
+                </select>
+                <button id="create-room-btn">Create Room</button>
+                <p id="room-code-display"></p>
+            </div>
+            <div>
+                <h3>Join Private Room</h3>
+                <input type="text" id="room-code" placeholder="Enter Room Code">
+                <button id="join-room-btn">Join Room</button>
+            </div>
+            <div>
+                <h3>Public Chat</h3>
+                <div id="public-chat-log"></div>
+                <input type="text" id="public-chat-input" placeholder="Type a message...">
+                <button id="public-chat-btn">Send</button>
+            </div>
         </div>
-        <div>
-            <h3>Join Private Room</h3>
-            <input type="text" id="room-code" placeholder="Enter Room Code">
-            <button id="join-room-btn">Join Room</button>
-        </div>
-        <div>
-            <h3>Join Public Lobby</h3>
-            <button id="join-lobby-btn">Join Lobby</button>
-        </div>
-    </div>
 
-    <div id="game">
-        <h1>Ceelo</h1>
-        <p id="room-info"></p>
-        <p id="game-status"></p>
-        <div id="players"></div>
-        <div id="bet-form">
-            <input type="number" id="bet-amount" placeholder="Bet Amount" min="1">
-            <button id="bet-btn">Bet</button>
+        <div id="game">
+            <h1>Ceelo</h1>
+            <p id="room-info"></p>
+            <p id="game-status"></p>
+            <div id="players"></div>
+            <div id="bet-form">
+                <input type="number" id="bet-amount" placeholder="Bet Amount" min="1">
+                <button id="bet-btn">Bet</button>
+            </div>
+            <div id="match-form">
+                <input type="number" id="match-amount" readonly>
+                <button id="match-btn">Match Bet</button>
+                <button id="leave-match-btn">Leave</button>
+            </div>
+            <button id="roll-btn">Roll</button>
+            <button id="leave-btn">Leave</button>
+            <div id="dice">
+                <span id="die1">-</span>
+                <span id="die2">-</span>
+                <span id="die3">-</span>
+            </div>
+            <p id="result"></p>
+            <p id="turn"></p>
+            <div id="chat">
+                <div id="chat-log"></div>
+                <input type="text" id="chat-input" placeholder="Type a message...">
+                <button id="chat-btn">Send</button>
+            </div>
         </div>
-        <div id="match-form">
-            <input type="number" id="match-amount" readonly>
-            <button id="match-btn">Match Bet</button>
-            <button id="leave-match-btn">Leave</button>
-        </div>
-        <button id="roll-btn">Roll</button>
-        <button id="leave-btn">Leave</button>
-        <div id="dice">
-            <span id="die1">-</span>
-            <span id="die2">-</span>
-            <span id="die3">-</span>
-        </div>
-        <p id="result"></p>
-        <p id="turn"></p>
-        <div id="chat">
-            <div id="chat-log"></div>
-            <input type="text" id="chat-input" placeholder="Type a message...">
-            <button id="chat-btn">Send</button>
-        </div>
-    </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
-</body>
+        <script src="/socket.io/socket.io.js"></script>
+        <script src="script.js"></script>
+    </body>
 </html>
