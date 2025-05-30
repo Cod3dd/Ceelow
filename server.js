@@ -3,6 +3,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const server = http.createServer(app);
@@ -24,45 +25,45 @@ const activeSockets = new Map();
 const publicChatMessages = [];
 
 function generateRoomCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-        code += chars[Math.floor(Math.random() * chars.length)];
+    const code = uuidv4().replace(/-/g, '').slice(0, 6).toUpperCase();
+    if (rooms.has(code)) {
+        console.warn(`Room code collision detected: ${code}. Retrying...`);
+        return generateRoomCode();
     }
-    return rooms.has(code) ? generateRoomCode() : code;
+    return code;
 }
 
 io.on('connection', (socket) => {
-    socket.on('createAccount', ({ username, password }) => {
+    socket.on('createAccount', ({ username, _ }) => {
         if (playersData[username]) {
-            socket.emit('accountError', 'Username already taken');
+            socket.emit('username taken', 'Username already taken');
             return;
         }
-        playersData[username] = { password, coins: 100 };
+        playersData[username'] = { username, password, coins: 100 };
         savePlayersData();
         activeSockets.set(username, socket.id);
-        socket.emit('accountCreated', { username, coins: 100 });
+        socket.emit('username', username);
         socket.join('publicChat');
-        socket.emit('publicChatHistory', publicChatMessages);
+        socket.emit('publicChatMessages', publicChatMessages);
     });
 
     socket.on('login', ({ username, password }) => {
         if (activeSockets.has(username)) {
-            socket.emit('loginError', 'Already logged in elsewhere');
+            socket.emit('error', 'Already logged in elsewhere');
             return;
         }
         if (!playersData[username]) {
-            socket.emit('loginError', 'Username not found');
+            socket.emit('error', 'Username not found');
             return;
         }
         if (playersData[username].password !== password) {
-            socket.emit('loginError', 'Wrong password');
+            socket.emit('error', 'Wrong password');
             return;
         }
         activeSockets.set(username, socket.id);
-        socket.emit('loginSuccess', { username, coins: playersData[username].coins });
+        socket.emit('setUsername', { username, coins: playersData[username].coins });
         socket.join('publicChat');
-        socket.emit('publicChatHistory', publicChatMessages);
+        socket.emit('publicChatMessages', publicChatMessages);
     });
 
     socket.on('sendPublicChat', ({ username, message }) => {
@@ -74,46 +75,56 @@ io.on('connection', (socket) => {
 
     socket.on('createRoom', ({ username, gameMode }) => {
         if (!activeSockets.has(username) || activeSockets.get(username) !== socket.id) {
-            socket.emit('joinError', 'Not logged in');
+            socket.emit('error', 'Not logged in');
+            return;
+        }
+        // Ensure player isn't in another room
+        const currentRoom = [...socket.rooms].find(room => room !== socket.id && room !== 'publicChat');
+        if (currentRoom) {
+            socket.emit('error', 'Leave current room before creating a new one!');
+            return;
+        }
+        const validModes = ['single', 'bo3', 'bo5'];
+        if (!validModes.includes(gameMode)) {
+            socket.emit('error', 'Invalid game mode');
             return;
         }
         const roomCode = generateRoomCode();
-        const validModes = ['single', 'bo3', 'bo5'];
-        if (!validModes.includes(gameMode)) {
-            socket.emit('joinError', 'Invalid game mode');
-            return;
-        }
         rooms.set(roomCode, { 
             players: [], 
             bets: new Map(), 
             rolls: new Map(), 
-            turn: 0, 
+            turn: true,
             active: false, 
             requiredBet: 0,
             maxBet: Infinity,
             gameMode,
             roundWins: new Map(),
-            roundNumber: 1,
             totalPot: 0,
             chatMessages: []
         });
         socket.emit('roomCreated', { roomCode, gameMode });
-        socket.emit('joinRoom', { username, roomCode });
+        socket.emit('join', { username, roomCode });
     });
 
-    socket.on('joinRoom', ({ username, roomCode }) => {
+    socket.on('join', ({ username, roomCode }) => {
         if (!activeSockets.has(username) || activeSockets.get(username) !== socket.id) {
-            socket.emit('joinError', 'Not logged in');
+            socket.emit('error', 'Not logged in');
             return;
         }
-        const normalizedCode = roomCode.trim().toUpperCase();
+        const normalizedCode = normalizeRoomCode(roomCode);
         if (!rooms.has(normalizedCode)) {
-            socket.emit('joinError', 'Room not found');
+            socket.emit('error', 'Room not found');
             return;
+        }
+        // Leave any existing room
+        const currentRoom = [...socket.rooms].find(room => room !== socket.id && room !== 'publicChat');
+        if (currentRoom) {
+            leaveRoom(socket, username, currentRoom);
         }
         socket.join(normalizedCode);
         const room = rooms.get(normalizedCode);
-        const player = { id: socket.id, name: username, coins: playersData[username].coins };
+        const player = { id: socket.id, username, coins: playersData[username].coins };
         if (!room.players.some(p => p.name === player.name)) {
             room.players.push(player);
             room.roundWins.set(player.id, 0);
@@ -126,11 +137,11 @@ io.on('connection', (socket) => {
         socket.emit('joined', { roomCode: normalizedCode, player, gameMode: room.gameMode, chatMessages: room.chatMessages });
         io.to(normalizedCode).emit('updatePlayers', room.players);
         io.to(normalizedCode).emit('roomStatus', { 
-            canPlay: room.players.length >= 2 && room.players.some(p => p.coins >= room.requiredBet),
+            active: room.active,
             maxBet: room.maxBet,
             gameMode: room.gameMode,
             roundNumber: room.roundNumber,
-            roundWins: Object.fromEntries(room.roundWins)
+            wins: Object.fromEntries(room.roundWins)
         });
     });
 
@@ -150,13 +161,13 @@ io.on('connection', (socket) => {
         const room = rooms.get(roomCode);
         if (!room || room.active || room.players.length < 2) return;
         if (room.players.some(p => p.coins === 0 && !room.bets.has(p.id))) {
-            io.to(roomCode).emit('betError', 'A player has 0 coins—betting paused');
+            io.to(roomCode).emit('error', 'A player has 0 coins—betting paused');
             endMatchEarly(room);
             return;
         }
         const player = room.players.find(p => p.name === username);
         if (!player || player.coins < bet || bet > room.maxBet) {
-            socket.emit('betError', `Bet must be 1 to ${Math.min(player.coins, room.maxBet)}`);
+            socket.emit('error', `Bet must be 1 to ${Math.min(player.coins, room.maxBet)}`);
             return;
         }
         if (room.bets.size > 0 && bet !== room.requiredBet && room.requiredBet !== 0) {
@@ -198,7 +209,7 @@ io.on('connection', (socket) => {
         if (!room || room.active || room.players.length < 2) return;
         const player = room.players.find(p => p.name === username);
         if (!player || bet !== room.requiredBet || player.coins < bet) {
-            socket.emit('betError', `Must match ${room.requiredBet} or leave`);
+            socket.emit('error', `Must match ${room.requiredBet} or leave`);
             return;
         }
         room.bets.set(player.id, bet);
@@ -217,39 +228,7 @@ io.on('connection', (socket) => {
     socket.on('leaveRoom', ({ username }) => {
         const roomCode = [...socket.rooms].find(room => room !== socket.id && room !== 'publicChat');
         if (!roomCode) return;
-        const room = rooms.get(roomCode);
-        if (!room) return;
-        const playerIdx = room.players.findIndex(p => p.name === username);
-        if (playerIdx !== -1) {
-            const player = room.players[playerIdx];
-            const bet = room.bets.get(player.id) || 0;
-            player.coins += bet;
-            playersData[player.name].coins = player.coins;
-            room.totalPot -= bet;
-            room.players.splice(playerIdx, 1);
-            room.bets.delete(player.id);
-            room.rolls.delete(player.id);
-            room.roundWins.delete(player.id);
-            if (room.bets.size > 0) {
-                room.requiredBet = Math.max(...room.bets.values());
-            } else {
-                room.requiredBet = 0;
-            }
-            room.maxBet = room.players.length >= 2 ? Math.min(...room.players.map(p => p.coins)) : Infinity;
-            savePlayersData();
-            io.to(roomCode).emit('updatePlayers', room.players);
-            io.to(roomCode).emit('roomStatus', { 
-                canPlay: room.players.length >= 2 && room.players.some(p => p.coins >= room.requiredBet),
-                maxBet: room.maxBet,
-                gameMode: room.gameMode,
-                roundNumber: room.roundNumber,
-                roundWins: Object.fromEntries(room.roundWins)
-            });
-            if (room.players.length < 2) {
-                endMatchEarly(room);
-            }
-            socket.leave(roomCode);
-        }
+        leaveRoom(socket, username, roomCode);
     });
 
     socket.on('rollDice', ({ username }) => {
@@ -287,39 +266,7 @@ io.on('connection', (socket) => {
             activeSockets.delete(username);
             const roomCode = [...socket.rooms].find(room => room !== socket.id && room !== 'publicChat');
             if (roomCode) {
-                const room = rooms.get(roomCode);
-                if (room) {
-                    const playerIdx = room.players.findIndex(p => p.id === socket.id);
-                    if (playerIdx !== -1) {
-                        const player = room.players[playerIdx];
-                        const bet = room.bets.get(player.id) || 0;
-                        player.coins += bet;
-                        playersData[player.name].coins = player.coins;
-                        room.totalPot -= bet;
-                        room.players.splice(playerIdx, 1);
-                        room.bets.delete(player.id);
-                        room.rolls.delete(player.id);
-                        room.roundWins.delete(player.id);
-                        if (room.bets.size > 0) {
-                            room.requiredBet = Math.max(...room.bets.values());
-                        } else {
-                            room.requiredBet = 0;
-                        }
-                        room.maxBet = room.players.length >= 2 ? Math.min(...room.players.map(p => p.coins)) : Infinity;
-                        savePlayersData();
-                        io.to(roomCode).emit('updatePlayers', room.players);
-                        io.to(roomCode).emit('roomStatus', { 
-                            canPlay: room.players.length >= 2 && room.players.some(p => p.coins >= room.requiredBet),
-                            maxBet: room.maxBet,
-                            gameMode: room.gameMode,
-                            roundNumber: room.roundNumber,
-                            roundWins: Object.fromEntries(room.roundWins)
-                        });
-                        if (room.players.length < 2) {
-                            endMatchEarly(room);
-                        }
-                    }
-                }
+                leaveRoom(socket, username, roomCode);
             }
             socket.leave('publicChat');
         }
@@ -375,13 +322,13 @@ io.on('connection', (socket) => {
                 playersData[p.name].coins = p.coins;
             });
             savePlayersData();
-            io.to(room.roomCode || roomCode).emit('gameOver', { 
+            io.to(room.roomCode).emit('gameOver', { 
                 message: `${winner.name} wins the match with ${room.roundWins.get(winner.id)}/${winsNeeded} rounds! Pot: ${room.totalPot}`,
                 players: room.players
             });
-            rooms.delete(room.roomCode || roomCode);
+            rooms.delete(room.roomCode);
         } else {
-            io.to(room.roomCode || roomCode).emit('roundOver', { 
+            io.to(room.roomCode).emit('roundOver', { 
                 message: `${winner.name} wins round ${room.roundNumber} with ${room.rolls.get(winner.id).result}!`,
                 roundWins: Object.fromEntries(room.roundWins)
             });
@@ -393,7 +340,7 @@ io.on('connection', (socket) => {
             room.requiredBet = 0;
             const remainingRounds = maxRounds - room.roundNumber + 1;
             room.maxBet = room.players.length >= 2 ? Math.min(...room.players.map(p => Math.floor(p.coins / remainingRounds))) : Infinity;
-            io.to(room.roomCode || roomCode).emit('roundReset');
+            io.to(room.roomCode).emit('roundReset');
         }
     }
 
@@ -414,7 +361,7 @@ io.on('connection', (socket) => {
                     playersData[p.name].coins = p.coins;
                 });
                 savePlayersData();
-                io.to(room.roomCode || roomCode).emit('gameOver', { 
+                io.to(room.roomCode).emit('gameOver', { 
                     message: `${winner.name} wins the match early due to insufficient players or coins! Pot: ${room.totalPot}`,
                     players: room.players
                 });
@@ -425,12 +372,12 @@ io.on('connection', (socket) => {
                     playersData[p.name].coins = p.coins;
                 });
                 savePlayersData();
-                io.to(room.roomCode || roomCode).emit('gameOver', { 
+                io.to(room.roomCode).emit('gameOver', { 
                     message: `Match ended early due to insufficient players or coins. Bets refunded.`,
                     players: room.players
                 });
             }
-            rooms.delete(room.roomCode || roomCode);
+            rooms.delete(room.roomCode);
         }
     }
 
@@ -444,6 +391,46 @@ io.on('connection', (socket) => {
             }
         }
         endRound(room, winner || room.players[0]);
+    }
+
+    function leaveRoom(socket, username, roomCode) {
+        const room = rooms.get(roomCode);
+        if (!room) return;
+        const playerIdx = room.players.findIndex(p => p.name === username);
+        if (playerIdx !== -1) {
+            const player = room.players[playerIdx];
+            const bet = room.bets.get(player.id) || 0;
+            player.coins += bet;
+            playersData[player.name].coins = player.coins;
+            room.totalPot -= bet;
+            room.players.splice(playerIdx, 1);
+            room.bets.delete(player.id);
+            room.rolls.delete(player.id);
+            room.roundWins.delete(player.id);
+            if (room.bets.size > 0) {
+                room.requiredBet = Math.max(...room.bets.values());
+            } else {
+                room.requiredBet = 0;
+            }
+            room.maxBet = room.players.length >= 2 ? Math.min(...room.players.map(p => p.coins)) : Infinity;
+            savePlayersData();
+            io.to(roomCode).emit('updatePlayers', room.players);
+            io.to(roomCode).emit('roomStatus', { 
+                canPlay: room.players.length >= 2 && room.players.some(p => p.coins >= room.requiredBet),
+                maxBet: room.maxBet,
+                gameMode: room.gameMode,
+                roundNumber: room.roundNumber,
+                roundWins: Object.fromEntries(room.roundWins)
+            });
+            if (room.players.length < 2) {
+                endMatchEarly(room);
+            }
+            socket.leave(roomCode);
+        }
+    }
+
+    function normalizeRoomCode(code) {
+        return code.trim().toUpperCase();
     }
 });
 
