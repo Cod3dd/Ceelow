@@ -29,9 +29,8 @@ document.getElementById('show-create').addEventListener('click', () => {
 
 document.getElementById('create-room-btn').addEventListener('click', () => {
     if (!myUsername) return alert('Log in first');
-    const gameMode = document.getElementById('game-mode').value;
     document.getElementById('create-room-btn').disabled = true;
-    socket.emit('createRoom', { username: myUsername, gameMode });
+    socket.emit('createRoom', { username: myUsername });
 });
 
 document.getElementById('join-room-btn').addEventListener('click', () => {
@@ -49,7 +48,7 @@ document.getElementById('leave-room-btn').addEventListener('click', () => {
 
 document.getElementById('public-chat-btn').addEventListener('click', () => {
     const message = document.getElementById('public-chat-input').value.trim();
-    if (!message) return;
+    if (!message || message.length > 200) return;
     socket.emit('sendPublicChat', { username: myUsername, message });
     document.getElementById('public-chat-input').value = '';
 });
@@ -86,7 +85,7 @@ document.getElementById('leave-btn').addEventListener('click', () => {
 
 document.getElementById('chat-btn').addEventListener('click', () => {
     const message = document.getElementById('chat-input').value.trim();
-    if (!message) return;
+    if (!message || message.length > 200) return;
     socket.emit('sendChat', { username: myUsername, message });
     document.getElementById('chat-input').value = '';
 });
@@ -129,8 +128,8 @@ socket.on('receivePublicChat', (msg) => {
     appendPublicChatMessage(msg);
 });
 
-socket.on('roomCreated', ({ roomCode, gameMode }) => {
-    document.getElementById('room-code-display').textContent = `Room Code: ${roomCode.trim()} (${gameMode.toUpperCase()})`;
+socket.on('roomCreated', ({ roomCode }) => {
+    document.getElementById('room-code-display').textContent = `Room Code: ${roomCode.trim()}`;
     document.getElementById('create-room-btn').disabled = false;
     document.getElementById('leave-room-btn').style.display = 'block';
 });
@@ -141,12 +140,12 @@ socket.on('joinError', (msg) => {
     alert(msg);
 });
 
-socket.on('joined', ({ player, roomCode, gameMode, chatMessages }) => {
+socket.on('joined', ({ player, roomCode, chatMessages }) => {
     document.getElementById('room-selection').style.display = 'none';
     document.getElementById('game').style.display = 'block';
     document.getElementById('coins').textContent = player.coins !== undefined ? player.coins : 0;
     document.getElementById('player-name').textContent = player.name || 'Unknown';
-    document.getElementById('room-info').textContent = `Room: ${roomCode} (${gameMode.toUpperCase()})`;
+    document.getElementById('room-info').textContent = `Room: ${roomCode}`;
     document.getElementById('join-room-btn').disabled = false;
     document.getElementById('leave-room-btn').style.display = 'none';
     chatMessages.forEach(msg => appendChatMessage(msg));
@@ -161,11 +160,11 @@ socket.on('updatePlayers', (players) => {
     }
 });
 
-socket.on('roomStatus', ({ canPlay, maxBet, gameMode, roundNumber, roundWins }) => {
+socket.on('roomStatus', ({ canPlay, maxBet }) => {
     document.getElementById('bet-btn').disabled = !canPlay;
     document.getElementById('roll-btn').disabled = !canPlay;
     document.getElementById('bet-amount').max = maxBet;
-    document.getElementById('game-status').textContent = `Mode: ${gameMode.toUpperCase()} | Round: ${roundNumber} | Wins: ${Object.entries(roundWins).map(([id, wins]) => `${players.find(p => p.id === id)?.name || 'Unknown'}: ${wins}`).join(', ')}`;
+    document.getElementById('game-status').textContent = `Single Round | Max Bet: ${maxBet}`;
     updateResult(canPlay ? `Place your bets! (Max: ${maxBet})` : 'Waiting for another player or coins...');
 });
 
@@ -197,13 +196,6 @@ socket.on('diceRolled', ({ player, dice, result }) => {
     updateResult(`${player}: ${result}`);
 });
 
-socket.on('roundOver', ({ message, roundWins }) => {
-    updateResult(message);
-    document.getElementById('game-status').textContent = `Wins: ${Object.entries(roundWins).map(([id, wins]) => `${players.find(p => p.id === id)?.name || 'Unknown'}: ${wins}`).join(', ')}`;
-    document.getElementById('turn').textContent = '';
-    document.getElementById('roll-btn').disabled = true;
-});
-
 socket.on('gameOver', ({ message, players }) => {
     updateResult(message);
     document.getElementById('turn').textContent = '';
@@ -217,35 +209,22 @@ socket.on('gameOver', ({ message, players }) => {
     resetUI();
 });
 
-socket.on('roundReset', () => {
-    document.getElementById('bet-amount').value = '';
-    document.getElementById('bet-form').style.display = 'block';
-    document.getElementById('match-form').style.display = 'none';
-    document.getElementById('bet-btn').disabled = false;
-    document.getElementById('roll-btn').disabled = true;
-    ['die1', 'die2', 'die3'].forEach(id => document.getElementById(id).textContent = '-');
-    document.getElementById('match-amount').value = '';
-    document.getElementById('match-btn').disabled = false;
-    document.getElementById('turn').textContent = '';
-    updateResult('Place your bets!');
-});
-
 socket.on('receiveChat', (msg) => {
     appendChatMessage(msg);
 });
 
 function appendChatMessage({ username, message, timestamp }) {
     const chatLog = document.getElementById('chat-log');
-    const msgElement = document.createElement('p');
-    msgElement.textContent = `[${new Date(timestamp).toLocaleTimeString()}] ${username}: ${message}`;
+    const msgElement = document.createElement('div');
+    msgElement.innerHTML = `<span style="color: gray;">[${new Date(timestamp).toLocaleTimeString()}]</span> <strong>${username}</strong>: ${message}`;
     chatLog.appendChild(msgElement);
     chatLog.scrollTop = chatLog.scrollHeight;
 }
 
 function appendPublicChatMessage({ username, message, timestamp }) {
     const chatLog = document.getElementById('public-chat-log');
-    const msgElement = document.createElement('p');
-    msgElement.textContent = `[${new Date(timestamp).toLocaleTimeString()}] ${username}: ${message}`;
+    const msgElement = document.createElement('div');
+    msgElement.innerHTML = `<span style="color: gray;">[${new Date(timestamp).toLocaleTimeString()}]</span> <strong>${username}</strong>: ${message}`;
     chatLog.appendChild(msgElement);
     chatLog.scrollTop = chatLog.scrollHeight;
 }
