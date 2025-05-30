@@ -6,9 +6,18 @@
     <title>Ceelo Casino</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
-        #login-form, #game, #match-form { display: none; }
+        #login-form, #game, #match-form, #room-selection { display: none; }
         #players p { margin: 5px; }
         #dice span { font-size: 24px; margin: 0 10px; }
+        #chat-log { 
+            height: 150px; 
+            overflow-y: auto; 
+            border: 1px solid #ccc; 
+            padding: 10px; 
+            margin: 10px 0; 
+            text-align: left;
+        }
+        #chat-input { width: 200px; }
     </style>
 </head>
 <body>
@@ -28,10 +37,34 @@
         <p><button id="show-create">Need an account? Create one</button></p>
     </div>
 
+    <div id="room-selection">
+        <h1>Join or Create Room</h1>
+        <p>Player: <span id="player-name"></span> | Coins: <span id="coins"></span></p>
+        <div>
+            <h3>Create Private Room</h3>
+            <select id="game-mode">
+                <option value="single">Single Round</option>
+                <option value="bo3">Best of 3</option>
+                <option value="bo5">Best of 5</option>
+            </select>
+            <button id="create-room-btn">Create Room</button>
+            <p id="room-code-display"></p>
+        </div>
+        <div>
+            <h3>Join Private Room</h3>
+            <input type="text" id="room-code" placeholder="Enter Room Code">
+            <button id="join-room-btn">Join Room</button>
+        </div>
+        <div>
+            <h3>Join Public Lobby</h3>
+            <button id="join-lobby-btn">Join Lobby</button>
+        </div>
+    </div>
+
     <div id="game">
         <h1>Ceelo</h1>
-        <p>Player: <span id="player-name"></span> | Coins: <span id="coins"></span></p>
-        <button id="join-btn">Join Lobby</button>
+        <p id="room-info"></p>
+        <p id="game-status"></p>
         <div id="players"></div>
         <div id="bet-form">
             <input type="number" id="bet-amount" placeholder="Bet Amount" min="1">
@@ -51,6 +84,11 @@
         </div>
         <p id="result"></p>
         <p id="turn"></p>
+        <div id="chat">
+            <div id="chat-log"></div>
+            <input type="text" id="chat-input" placeholder="Type a message...">
+            <button id="chat-btn">Send</button>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
