@@ -58,16 +58,30 @@ io.on('connection', (socket) => {
         }
         socket.join(roomCode);
         if (!rooms.has(roomCode)) {
-            rooms.set(roomCode, { players: [], bets: new Map(), rolls: new Map(), turn: 0, active: false, highestBet: 0 });
+            rooms.set(roomCode, { 
+                players: [], 
+                bets: new Map(), 
+                rolls: new Map(), 
+                turn: 0, 
+                active: false, 
+                requiredBet: 0,
+                maxBet: Infinity 
+            });
         }
         const room = rooms.get(roomCode);
         const player = { id: socket.id, name: username, coins: playersData[username].coins };
         if (!room.players.some(p => p.name === player.name)) {
             room.players.push(player);
         }
+        if (room.players.length >= 2) {
+            room.maxBet = Math.min(...room.players.map(p => p.coins));
+        }
         socket.emit('joined', { roomCode, player });
         io.to(roomCode).emit('updatePlayers', room.players);
-        io.to(roomCode).emit('roomStatus', { canPlay: room.players.length >= 2 && room.players.every(p => p.coins > 0) });
+        io.to(roomCode).emit('roomStatus', { 
+            canPlay: room.players.length >= 2 && room.players.every(p => p.coins > 0),
+            maxBet: room.maxBet
+        });
     });
 
     socket.on('placeBet', ({ username, bet }) => {
@@ -78,20 +92,79 @@ io.on('connection', (socket) => {
             return;
         }
         const player = room.players.find(p => p.name === username);
-        if (!player || player.coins < bet || bet < room.highestBet || room.bets.has(player.id)) {
-            socket.emit('betError', `Bet must be ${room.highestBet} to ${player.coins}`);
+        if (!player || player.coins < bet || bet > room.maxBet) {
+            socket.emit('betError', `Bet must be 1 to ${Math.min(player.coins, room.maxBet)}`);
+            return;
+        }
+        if (room.bets.size > 0 && bet !== room.requiredBet && room.requiredBet !== 0) {
+            socket.emit('matchBet', { requiredBet: room.requiredBet });
             return;
         }
         room.bets.set(player.id, bet);
-        room.highestBet = Math.max(room.highestBet, bet); // Update highest bet
+        if (bet > room.requiredBet) {
+            room.requiredBet = bet;
+            // Notify other players to match
+            room.players.forEach(p => {
+                if (p.name !== username && room.bets.has(p.id)) {
+                    io.to(p.id).emit('matchBet', { requiredBet: bet });
+                    room.bets.delete(p.id); // Clear their old bet
+                    p.coins += room.bets.get(p.id) || 0; // Refund
+                    playersData[p.name].coins = p.coins;
+                }
+            });
+            savePlayersData();
+        }
         player.coins -= bet;
         playersData[username].coins = player.coins;
         savePlayersData();
         io.to('lobby').emit('updatePlayers', room.players);
-        io.to('lobby').emit('betPlaced', { username, bet, highestBet: room.highestBet });
-        if (room.bets.size === room.players.length) {
+        io.to('lobby').emit('betPlaced', { username, bet, requiredBet: room.requiredBet });
+        if (room.bets.size === room.players.length && [...room.bets.values()].every(b => b === room.requiredBet)) {
             room.active = true;
             io.to('lobby').emit('nextTurn', { playerName: room.players[0].name });
+        }
+    });
+
+    socket.on('matchBet', ({ username, bet }) => {
+        const room = rooms.get('lobby');
+        if (!room || room.active || room.players.length < 2) return;
+        const player = room.players.find(p => p.name === username);
+        if (!player || bet !== room.requiredBet || player.coins < bet) {
+            socket.emit('betError', `Must match ${room.requiredBet} or leave`);
+            return;
+        }
+        room.bets.set(player.id, bet);
+        player.coins -= bet;
+        playersData[username].coins = player.coins;
+        savePlayersData();
+        io.to('lobby').emit('updatePlayers', room.players);
+        io.to('lobby').emit('betPlaced', { username, bet, requiredBet: room.requiredBet });
+        if (room.bets.size === room.players.length && [...room.bets.values()].every(b => b === room.requiredBet)) {
+            room.active = true;
+            io.to('lobby').emit('nextTurn', { playerName: room.players[0].name });
+        }
+    });
+
+    socket.on('leaveRoom', ({ username }) => {
+        const room = rooms.get('lobby');
+        if (!room) return;
+        const playerIdx = room.players.findIndex(p => p.name === username);
+        if (playerIdx !== -1) {
+            const player = room.players[playerIdx];
+            room.players.splice(playerIdx, 1);
+            room.bets.delete(player.id);
+            room.rolls.delete(player.id);
+            if (room.bets.size > 0) {
+                room.requiredBet = Math.max(...room.bets.values());
+            } else {
+                room.requiredBet = 0;
+            }
+            io.to('lobby').emit('updatePlayers', room.players);
+            io.to('lobby').emit('roomStatus', { 
+                canPlay: room.players.length >= 2 && room.players.every(p => p.coins > 0),
+                maxBet: room.maxBet
+            });
+            if (room.players.length === 0) rooms.delete('lobby');
         }
     });
 
@@ -133,8 +206,16 @@ io.on('connection', (socket) => {
                     room.players.splice(playerIdx, 1);
                     room.bets.delete(socket.id);
                     room.rolls.delete(socket.id);
+                    if (room.bets.size > 0) {
+                        room.requiredBet = Math.max(...room.bets.values());
+                    } else {
+                        room.requiredBet = 0;
+                    }
                     io.to('lobby').emit('updatePlayers', room.players);
-                    io.to('lobby').emit('roomStatus', { canPlay: room.players.length >= 2 && room.players.every(p => p.coins > 0) });
+                    io.to('lobby').emit('roomStatus', { 
+                        canPlay: room.players.length >= 2 && room.players.every(p => p.coins > 0),
+                        maxBet: room.maxBet
+                    });
                     if (room.players.length === 0) rooms.delete('lobby');
                 }
             }
@@ -187,7 +268,8 @@ io.on('connection', (socket) => {
         room.bets.clear();
         room.rolls.clear();
         room.turn = 0;
-        room.highestBet = 0;
+        room.requiredBet = 0;
+        room.maxBet = room.players.length >= 2 ? Math.min(...room.players.map(p => p.coins)) : Infinity;
         io.to('lobby').emit('roundReset');
     }
 
