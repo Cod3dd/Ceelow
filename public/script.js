@@ -90,8 +90,8 @@ socket.on('accountCreated', ({ username, coins }) => {
     document.getElementById('create-form').style.display = 'none';
     document.getElementById('login-form').style.display = 'none';
     document.getElementById('room-selection').style.display = 'block';
-    document.getElementById('player-name').textContent = username;
-    document.getElementById('coins').textContent = coins;
+    document.getElementById('player-name').textContent = username || 'Unknown';
+    document.getElementById('coins').textContent = coins !== undefined ? coins : 0;
     document.getElementById('create-btn').disabled = false;
 });
 
@@ -105,8 +105,8 @@ socket.on('loginSuccess', ({ username, coins }) => {
     document.getElementById('create-form').style.display = 'none';
     document.getElementById('login-form').style.display = 'none';
     document.getElementById('room-selection').style.display = 'block';
-    document.getElementById('player-name').textContent = username;
-    document.getElementById('coins').textContent = coins;
+    document.getElementById('player-name').textContent = username || 'Unknown';
+    document.getElementById('coins').textContent = coins !== undefined ? coins : 0;
     document.getElementById('login-btn').disabled = false;
 });
 
@@ -116,7 +116,7 @@ socket.on('loginError', (msg) => {
 });
 
 socket.on('roomCreated', ({ roomCode, gameMode }) => {
-    document.getElementById('room-code-display').textContent = `Room Code: ${roomCode} (${gameMode.toUpperCase()})`;
+    document.getElementById('room-code-display').textContent = `Room Code: ${roomCode.trim()} (${gameMode.toUpperCase()})`;
     document.getElementById('create-room-btn').disabled = false;
 });
 
@@ -130,7 +130,8 @@ socket.on('joinError', (msg) => {
 socket.on('joined', ({ player, roomCode, gameMode, chatMessages }) => {
     document.getElementById('room-selection').style.display = 'none';
     document.getElementById('game').style.display = 'block';
-    document.getElementById('coins').textContent = player.coins;
+    document.getElementById('coins').textContent = player.coins !== undefined ? player.coins : 0;
+    document.getElementById('player-name').textContent = player.name || 'Unknown';
     document.getElementById('room-info').textContent = roomCode === 'lobby' ? 'Public Lobby (Single)' : `Room: ${roomCode} (${gameMode.toUpperCase()})`;
     document.getElementById('join-room-btn').disabled = false;
     document.getElementById('join-lobby-btn').disabled = false;
@@ -140,14 +141,17 @@ socket.on('joined', ({ player, roomCode, gameMode, chatMessages }) => {
 socket.on('updatePlayers', (players) => {
     document.getElementById('players').innerHTML = players.map(p => `<p>${p.name} - ${p.coins}</p>`).join('');
     const me = players.find(p => p.name === myUsername);
-    if (me) document.getElementById('coins').textContent = me.coins;
+    if (me) {
+        document.getElementById('coins').textContent = me.coins !== undefined ? me.coins : 0;
+        document.getElementById('player-name').textContent = me.name || 'Unknown';
+    }
 });
 
 socket.on('roomStatus', ({ canPlay, maxBet, gameMode, roundNumber, roundWins }) => {
     document.getElementById('bet-btn').disabled = !canPlay;
     document.getElementById('roll-btn').disabled = !canPlay;
     document.getElementById('bet-amount').max = maxBet;
-    document.getElementById('game-status').textContent = `Mode: ${gameMode.toUpperCase()} | Round: ${roundNumber} | Wins: ${Object.entries(roundWins).map(([id, wins]) => `${players.find(p => p.id === id)?.name}: ${wins}`).join(', ')}`;
+    document.getElementById('game-status').textContent = `Mode: ${gameMode.toUpperCase()} | Round: ${roundNumber} | Wins: ${Object.entries(roundWins).map(([id, wins]) => `${players.find(p => p.id === id)?.name || 'Unknown'}: ${wins}`).join(', ')}`;
     updateResult(canPlay ? `Place your bets! (Max: ${maxBet})` : 'Waiting for another player or coins...');
 });
 
@@ -181,7 +185,7 @@ socket.on('diceRolled', ({ player, dice, result }) => {
 
 socket.on('roundOver', ({ message, roundWins }) => {
     updateResult(message);
-    document.getElementById('game-status').textContent = `Wins: ${Object.entries(roundWins).map(([id, wins]) => `${players.find(p => p.id === id)?.name}: ${wins}`).join(', ')}`;
+    document.getElementById('game-status').textContent = `Wins: ${Object.entries(roundWins).map(([id, wins]) => `${players.find(p => p.id === id)?.name || 'Unknown'}: ${wins}`).join(', ')}`;
     document.getElementById('turn').textContent = '';
     document.getElementById('roll-btn').disabled = true;
 });
@@ -192,7 +196,10 @@ socket.on('gameOver', ({ message, players }) => {
     document.getElementById('roll-btn').disabled = true;
     document.getElementById('players').innerHTML = players.map(p => `<p>${p.name} - ${p.coins}</p>`).join('');
     const me = players.find(p => p.name === myUsername);
-    if (me) document.getElementById('coins').textContent = me.coins;
+    if (me) {
+        document.getElementById('coins').textContent = me.coins !== undefined ? me.coins : 0;
+        document.getElementById('player-name').textContent = me.name || 'Unknown';
+    }
     resetUI();
 });
 
