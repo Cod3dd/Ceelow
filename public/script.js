@@ -42,10 +42,11 @@ document.getElementById('join-room-btn').addEventListener('click', () => {
     socket.emit('joinRoom', { username: myUsername, roomCode });
 });
 
-document.getElementById('join-lobby-btn').addEventListener('click', () => {
-    if (!myUsername) return alert('Log in first');
-    document.getElementById('join-lobby-btn').disabled = true;
-    socket.emit('joinRoom', { username: myUsername });
+document.getElementById('public-chat-btn').addEventListener('click', () => {
+    const message = document.getElementById('public-chat-input').value.trim();
+    if (!message) return;
+    socket.emit('sendPublicChat', { username: myUsername, message });
+    document.getElementById('public-chat-input').value = '';
 });
 
 document.getElementById('bet-btn').addEventListener('click', () => {
@@ -115,6 +116,14 @@ socket.on('loginError', (msg) => {
     alert(msg);
 });
 
+socket.on('publicChatHistory', (messages) => {
+    messages.forEach(msg => appendPublicChatMessage(msg));
+});
+
+socket.on('receivePublicChat', (msg) => {
+    appendPublicChatMessage(msg);
+});
+
 socket.on('roomCreated', ({ roomCode, gameMode }) => {
     document.getElementById('room-code-display').textContent = `Room Code: ${roomCode.trim()} (${gameMode.toUpperCase()})`;
     document.getElementById('create-room-btn').disabled = false;
@@ -122,7 +131,6 @@ socket.on('roomCreated', ({ roomCode, gameMode }) => {
 
 socket.on('joinError', (msg) => {
     document.getElementById('join-room-btn').disabled = false;
-    document.getElementById('join-lobby-btn').disabled = false;
     document.getElementById('create-room-btn').disabled = false;
     alert(msg);
 });
@@ -132,9 +140,8 @@ socket.on('joined', ({ player, roomCode, gameMode, chatMessages }) => {
     document.getElementById('game').style.display = 'block';
     document.getElementById('coins').textContent = player.coins !== undefined ? player.coins : 0;
     document.getElementById('player-name').textContent = player.name || 'Unknown';
-    document.getElementById('room-info').textContent = roomCode === 'lobby' ? 'Public Lobby (Single)' : `Room: ${roomCode} (${gameMode.toUpperCase()})`;
+    document.getElementById('room-info').textContent = `Room: ${roomCode} (${gameMode.toUpperCase()})`;
     document.getElementById('join-room-btn').disabled = false;
-    document.getElementById('join-lobby-btn').disabled = false;
     chatMessages.forEach(msg => appendChatMessage(msg));
 });
 
@@ -228,6 +235,14 @@ function appendChatMessage({ username, message, timestamp }) {
     chatLog.scrollTop = chatLog.scrollHeight;
 }
 
+function appendPublicChatMessage({ username, message, timestamp }) {
+    const chatLog = document.getElementById('public-chat-log');
+    const msgElement = document.createElement('p');
+    msgElement.textContent = `[${new Date(timestamp).toLocaleTimeString()}] ${username}: ${message}`;
+    chatLog.appendChild(msgElement);
+    chatLog.scrollTop = chatLog.scrollHeight;
+}
+
 function updateResult(message) {
     document.getElementById('result').textContent = message;
 }
@@ -254,6 +269,7 @@ function resetUI() {
     document.getElementById('chat-log').innerHTML = '';
     document.getElementById('chat-input').value = '';
     document.getElementById('room-code').value = '';
+    document.getElementById('public-chat-input').value = '';
     document.getElementById('room-info').textContent = '';
     document.getElementById('game-status').textContent = '';
     updateResult('');
