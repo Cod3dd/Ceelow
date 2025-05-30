@@ -40,11 +40,24 @@ document.getElementById('bet-btn').addEventListener('click', () => {
     document.getElementById('bet-btn').disabled = true;
 });
 
+document.getElementById('match-btn').addEventListener('click', () => {
+    const bet = parseInt(document.getElementById('match-amount').value);
+    if (isNaN(bet) || bet <= 0 || bet > parseInt(document.getElementById('coins').textContent)) return updateResult('Invalid match amount');
+    socket.emit('matchBet', { username: myUsername, bet });
+    document.getElementById('match-btn').disabled = true;
+});
+
+document.getElementById('leave-match-btn').addEventListener('click', () => {
+    socket.emit('leaveRoom', { username: myUsername });
+    resetUI();
+});
+
 document.getElementById('roll-btn').addEventListener('click', () => {
     socket.emit('rollDice', { username: myUsername });
 });
 
 document.getElementById('leave-btn').addEventListener('click', () => {
+    socket.emit('leaveRoom', { username: myUsername });
     socket.close();
     resetUI();
     socket.connect();
@@ -96,19 +109,29 @@ socket.on('updatePlayers', (players) => {
     if (me) document.getElementById('coins').textContent = me.coins;
 });
 
-socket.on('roomStatus', ({ canPlay }) => {
+socket.on('roomStatus', ({ canPlay, maxBet }) => {
     document.getElementById('bet-btn').disabled = !canPlay;
     document.getElementById('roll-btn').disabled = !canPlay;
-    updateResult(canPlay ? 'Place your bets!' : 'Waiting for another player...');
+    document.getElementById('bet-amount').max = maxBet;
+    updateResult(canPlay ? `Place your bets! (Max: ${maxBet})` : 'Waiting for another player...');
 });
 
-socket.on('betPlaced', ({ username, bet, highestBet }) => {
-    updateResult(`${username} bets ${bet}. Minimum bet now: ${highestBet}`);
+socket.on('betPlaced', ({ username, bet, requiredBet }) => {
+    updateResult(`${username} bets ${bet}. All bets must be ${requiredBet}`);
 });
 
 socket.on('betError', (msg) => {
     document.getElementById('bet-btn').disabled = false;
     updateResult(msg);
+});
+
+socket.on('matchBet', ({ requiredBet }) => {
+    document.getElementById('bet-form').style.display = 'none';
+    document.getElementById('match-form').style.display = 'block';
+    document.getElementById('match-amount').value = requiredBet;
+    document.getElementById('match-amount').min = requiredBet;
+    document.getElementById('match-amount').max = requiredBet;
+    updateResult(`Match ${requiredBet} or leave`);
 });
 
 socket.on('nextTurn', ({ playerName }) => {
@@ -129,9 +152,13 @@ socket.on('gameOver', ({ message }) => {
 
 socket.on('roundReset', () => {
     document.getElementById('bet-amount').value = '';
+    document.getElementById('bet-form').style.display = 'block';
+    document.getElementById('match-form').style.display = 'none';
     document.getElementById('bet-btn').disabled = false;
     document.getElementById('roll-btn').disabled = true;
     ['die1', 'die2', 'die3'].forEach(id => document.getElementById(id).textContent = '-');
+    document.getElementById('match-amount').value = '';
+    document.getElementById('match-btn').disabled = false;
     updateResult('Place your bets!');
     document.getElementById('turn').textContent = '';
 });
@@ -155,6 +182,9 @@ function resetUI() {
     document.getElementById('bet-btn').disabled = true;
     document.getElementById('roll-btn').disabled = true;
     ['die1', 'die2', 'die3'].forEach(id => document.getElementById(id).textContent = '-');
+    document.getElementById('match-amount').value = '';
+    document.getElementById('match-form').style.display = 'none';
+    document.getElementById('bet-form').style.display = 'block';
     updateResult('');
     document.getElementById('turn').textContent = '';
     myUsername = null;
