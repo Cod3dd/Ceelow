@@ -102,12 +102,12 @@ io.on('connection', (socket) => {
         }
         const roomCode = generateRoomCode();
         rooms.set(roomCode, { 
+            roomCode,
             players: [], 
             bets: new Map(), 
             rolls: new Map(), 
             turn: 0, 
             active: false, 
-            requiredBet: 0,
             maxBet: Infinity,
             totalPot: 0,
             chatMessages: []
@@ -140,7 +140,7 @@ io.on('connection', (socket) => {
         socket.emit('joined', { roomCode: normalizedCode, player, chatMessages: room.chatMessages });
         io.to(normalizedCode).emit('updatePlayers', room.players);
         io.to(normalizedCode).emit('roomStatus', { 
-            canPlay: room.players.length >= 2 && room.players.some(p => p.coins >= room.requiredBet),
+            canPlay: room.players.length >= 2 && room.players.every(p => p.coins > 0),
             maxBet: room.maxBet
         });
     });
@@ -162,68 +162,41 @@ io.on('connection', (socket) => {
         if (!roomCode) return;
         const room = rooms.get(roomCode);
         if (!room || room.active || room.players.length < 2) return;
-        if (room.players.some(p => p.coins === 0 && !room.bets.has(p.id))) {
-            io.to(roomCode).emit('betError', 'A player has 0 coins—betting paused');
+        if (room.players.some(p => p.coins === 0)) {
+            io.to(roomCode).emit('betError', 'A player has 0 coins—match ended');
             endMatchEarly(room);
             return;
         }
         const player = room.players.find(p => p.name === username);
-        if (!player || player.coins < bet || bet > room.maxBet) {
+        if (!player || player.coins < bet || bet <= 0 || bet > room.maxBet) {
             socket.emit('betError', `Bet must be 1 to ${Math.min(player.coins, room.maxBet)}`);
             return;
         }
-        if (room.bets.size > 0 && bet !== room.requiredBet && room.requiredBet !== 0) {
-            socket.emit('matchBet', { requiredBet: room.requiredBet });
-            return;
-        }
         room.bets.set(player.id, bet);
-        if (bet > room.requiredBet) {
-            room.requiredBet = bet;
-            room.players.forEach(p => {
-                if (p.name !== username && room.bets.has(p.id)) {
+        player.coins -= bet;
+        room.totalPot += bet;
+        playersData[username].coins = player.coins;
+        savePlayersData();
+        io.to(roomCode).emit('updatePlayers', room.players);
+        io.to(roomCode).emit('betPlaced', { username, bet, totalPot: room.totalPot });
+
+        if (room.bets.size === room.players.length) {
+            const bets = [...room.bets.values()];
+            if (bets.every(b => b === bets[0])) {
+                room.active = true;
+                io.to(roomCode).emit('nextTurn', { playerName: room.players[0].name });
+            } else {
+                room.players.forEach(p => {
                     const oldBet = room.bets.get(p.id) || 0;
                     p.coins += oldBet;
                     playersData[p.name].coins = p.coins;
                     room.totalPot -= oldBet;
-                    room.bets.delete(p.id);
-                    io.to(p.id).emit('matchBet', { requiredBet: bet });
-                }
-            });
-            savePlayersData();
-            io.to(roomCode).emit('updatePlayers', room.players);
-        }
-        player.coins -= bet;
-        room.totalPot += bet;
-        playersData[username].coins = player.coins;
-        savePlayersData();
-        io.to(roomCode).emit('updatePlayers', room.players);
-        io.to(roomCode).emit('betPlaced', { username, bet, requiredBet: room.requiredBet, totalPot: room.totalPot });
-        if (room.bets.size === room.players.length && [...room.bets.values()].every(b => b === room.requiredBet)) {
-            room.active = true;
-            io.to(roomCode).emit('nextTurn', { playerName: room.players[0].name });
-        }
-    });
-
-    socket.on('matchBet', ({ username, bet }) => {
-        const roomCode = [...socket.rooms].find(room => room !== socket.id && room !== 'publicChat');
-        if (!roomCode) return;
-        const room = rooms.get(roomCode);
-        if (!room || room.active || room.players.length < 2) return;
-        const player = room.players.find(p => p.name === username);
-        if (!player || bet !== room.requiredBet || player.coins < bet) {
-            socket.emit('betError', `Must match ${room.requiredBet} or leave`);
-            return;
-        }
-        room.bets.set(player.id, bet);
-        player.coins -= bet;
-        room.totalPot += bet;
-        playersData[username].coins = player.coins;
-        savePlayersData();
-        io.to(roomCode).emit('updatePlayers', room.players);
-        io.to(roomCode).emit('betPlaced', { username, bet, requiredBet: room.requiredBet, totalPot: room.totalPot });
-        if (room.bets.size === room.players.length && [...room.bets.values()].every(b => b === room.requiredBet)) {
-            room.active = true;
-            io.to(roomCode).emit('nextTurn', { playerName: room.players[0].name });
+                });
+                room.bets.clear();
+                savePlayersData();
+                io.to(roomCode).emit('betError', 'Bets must be equal. Try again.');
+                io.to(roomCode).emit('updatePlayers', room.players);
+            }
         }
     });
 
@@ -322,8 +295,9 @@ io.on('connection', (socket) => {
         });
         savePlayersData();
         io.to(room.roomCode).emit('gameOver', { 
-            message: `${winner.name} wins with ${room.rolls.get(winner.id).result}! Pot: ${room.totalPot}`,
-            players: room.players
+            message: `${winner.name} wins with ${room.rolls.get(winner.id)?.result || 'highest point'}! Pot: ${room.totalPot}`,
+            players: room.players,
+            winner: winner.name
         });
         rooms.delete(room.roomCode);
     }
@@ -339,10 +313,13 @@ io.on('connection', (socket) => {
                 p.coins += bet;
                 playersData[p.name].coins = p.coins;
             });
+            room.totalPot = 0;
+            room.bets.clear();
             savePlayersData();
             io.to(room.roomCode).emit('gameOver', { 
                 message: `Match ended early due to insufficient players. Bets refunded.`,
-                players: room.players
+                players: room.players,
+                winner: null
             });
             rooms.delete(room.roomCode);
         }
@@ -373,16 +350,11 @@ io.on('connection', (socket) => {
             room.players.splice(playerIdx, 1);
             room.bets.delete(player.id);
             room.rolls.delete(player.id);
-            if (room.bets.size > 0) {
-                room.requiredBet = Math.max(...room.bets.values());
-            } else {
-                room.requiredBet = 0;
-            }
             room.maxBet = room.players.length >= 2 ? Math.min(...room.players.map(p => p.coins)) : Infinity;
             savePlayersData();
             io.to(roomCode).emit('updatePlayers', room.players);
             io.to(roomCode).emit('roomStatus', { 
-                canPlay: room.players.length >= 2 && room.players.some(p => p.coins >= room.requiredBet),
+                canPlay: room.players.length >= 2 && room.players.every(p => p.coins > 0),
                 maxBet: room.maxBet
             });
             if (room.players.length < 2) {
